@@ -1,5 +1,4 @@
 -- Flyway V1: create the warehouse slotting schema.
--- Source: warehouse_slotting_schema_v3_2_1_ddl.sql
 -- Objects: ENUM types, tables, indexes, comments and foreign keys.
 -- Objects created by this migration are owned by warehouse_owner.
 

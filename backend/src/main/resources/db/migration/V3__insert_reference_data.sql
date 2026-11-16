@@ -1,6 +1,4 @@
 -- Flyway V3: insert initial reference/configuration data.
--- Source schema: warehouse_slotting_schema_v3_2_1
---
 -- Seed only the two fixed baseline strategies used in experiment design:
 -- B1 = nearest_feasible
 -- B2 = pick_frequency
