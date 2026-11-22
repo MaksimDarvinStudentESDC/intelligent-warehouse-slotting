@@ -1,0 +1,2 @@
+export class ApiError extends Error {constructor(public status:number,message:string){super(message)}}
+export async function api<T>(path:string,options?:RequestInit):Promise<T>{let response:Response;try{response=await fetch(`/api${path}`,{...options,headers:{'Content-Type':'application/json',...options?.headers}})}catch{throw new ApiError(0,'Cannot connect to the server. Check that the backend is running.')}if(!response.ok){const body=await response.text();throw new ApiError(response.status,body||`Request failed (${response.status})`)}return response.json() as Promise<T>}

@@ -1,0 +1,625 @@
+openapi: 3.0.3
+info:
+  title: Intelligent Warehouse Slotting Optimization System API
+  version: 0.1.0
+  description: Current implemented REST API, documented from the uploaded Java source. Recommendations currently
+    use nearest_feasible, not the planned multi-criteria optimizer. Error bodies depend on Spring Boot configuration;
+    examples below show messages from ResponseStatusException, not a guaranteed wire format.
+servers:
+- url: http://localhost:8080
+  description: Local development
+tags:
+- name: Catalog
+- name: Warehouse
+- name: Classification
+- name: Constraints
+- name: Recommendations
+paths:
+  /api/products:
+    post:
+      tags:
+      - Catalog
+      summary: Create a product
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+              example:
+                id: 10
+                sku: SKU-001
+                name: Example product
+                unitVolumeDm3: 3
+                unitWeightKg: 1.25
+        '400':
+          description: Invalid request or compatibility group; response body is determined by Spring Boot error
+            configuration.
+        '404':
+          description: Warehouse not found; response body is determined by Spring Boot error configuration.
+        '409':
+          description: SKU already exists in warehouse; response body is determined by Spring Boot error configuration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+            example:
+              warehouseId: 1
+              sku: SKU-001
+              name: Example product
+              lengthMm: 200
+              widthMm: 150
+              heightMm: 100
+              unitWeightKg: 1.25
+              compatibilityGroupId: null
+              shelfLifeDays: 90
+              outboundFlow: PICKING
+  /api/batches:
+    post:
+      tags:
+      - Catalog
+      summary: Register an incoming batch
+      responses:
+        '201':
+          description: Batch registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchResponse'
+              example:
+                id: 25
+                batchCode: BATCH-001
+                quantity: 12
+                volumeDm3: 36
+                weightKg: 15
+                receivingDate: '2026-11-22'
+                expiryDate: '2027-02-20'
+                status: AWAITING_PUTAWAY
+        '400':
+          description: Invalid request, archived product or expiry date not after receiving date; response body
+            is determined by Spring Boot error configuration.
+        '404':
+          description: Product not found; response body is determined by Spring Boot error configuration.
+        '409':
+          description: Batch code already exists in warehouse; response body is determined by Spring Boot error
+            configuration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBatchRequest'
+            example:
+              productId: 10
+              batchCode: BATCH-001
+              quantity: 12
+              receivingDate: '2026-11-22'
+              expiryDate: '2027-02-20'
+  /api/warehouses/{warehouseId}/batches:
+    get:
+      tags:
+      - Warehouse
+      summary: List warehouse batches
+      responses:
+        '200':
+          description: Batch list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BatchResponse'
+              example:
+              - id: 25
+                batchCode: BATCH-001
+                quantity: 12
+                volumeDm3: 36
+                weightKg: 15
+                receivingDate: '2026-11-22'
+                expiryDate: '2027-02-20'
+                status: AWAITING_PUTAWAY
+      parameters:
+      - name: warehouseId
+        in: path
+        required: true
+        description: Identifier
+        schema:
+          type: integer
+          format: int64
+        example: 1
+  /api/warehouses/{warehouseId}/locations:
+    get:
+      tags:
+      - Warehouse
+      summary: List active warehouse locations
+      responses:
+        '200':
+          description: Active locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LocationResponse'
+              example:
+              - id: 7
+                code: A-01-01
+                zoneId: 2
+                capacityDm3: 500
+                occupiedDm3: 100
+                maxWeightKg: 250
+                distanceToReceivingM: 15
+                distanceToPickingM: 8
+                distanceToShippingM: 20
+                active: true
+      parameters:
+      - name: warehouseId
+        in: path
+        required: true
+        description: Identifier
+        schema:
+          type: integer
+          format: int64
+        example: 1
+  /api/classifications/run:
+    post:
+      tags:
+      - Classification
+      summary: Run and persist ABC/XYZ classification
+      responses:
+        '201':
+          description: Classification run persisted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassificationResult'
+              example:
+                runId: 5
+                warehouseId: 1
+                windowStart: '2026-10-01'
+                windowEnd: '2026-10-31'
+                products:
+                - productId: 10
+                  sku: SKU-001
+                  abcClass: A
+                  xyzClass: X
+                  movementCount: 40
+                  cumulativeShare: 0.8
+                  cv: 0.32
+                  note: null
+        '400':
+          description: Missing/invalid date range, too long a window, or warehouse is not LIVE; response body is
+            determined by Spring Boot error configuration.
+        '404':
+          description: Warehouse not found; response body is determined by Spring Boot error configuration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunClassificationRequest'
+            example:
+              warehouseId: 1
+              windowStart: '2026-10-01'
+              windowEnd: '2026-10-31'
+      description: Date window is inclusive; maximum allowed difference between dates is 3650 days. Request fields
+        are checked in the service rather than Jakarta Bean Validation.
+  /api/constraints/batches/{batchId}/locations/{locationId}:
+    get:
+      tags:
+      - Constraints
+      summary: Check whether a location can hold a batch
+      responses:
+        '200':
+          description: Feasibility result, including rejection reasons
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConstraintCheckResponse'
+              example:
+                batchId: 25
+                locationId: 7
+                locationCode: A-01-01
+                feasible: false
+                rejectionReasons:
+                - INSUFFICIENT_VOLUME
+        '404':
+          description: Batch or location not found; response body is determined by Spring Boot error configuration.
+      parameters:
+      - name: batchId
+        in: path
+        required: true
+        description: Identifier
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      - name: locationId
+        in: path
+        required: true
+        description: Identifier
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      description: 'A non-feasible location is reported with HTTP 200 and feasible=false, not as an HTTP error.
+        Possible rejection codes: WAREHOUSE_MISMATCH, BATCH_NOT_AWAITING_PUTAWAY, LOCATION_INACTIVE, NOT_STORAGE_LOCATION,
+        INSUFFICIENT_VOLUME, INSUFFICIENT_WEIGHT_CAPACITY, DIMENSIONS_EXCEEDED, INCOMPATIBLE_PRODUCTS.'
+  /api/recommendations/batches/{batchId}:
+    get:
+      tags:
+      - Recommendations
+      summary: List nearest feasible locations
+      responses:
+        '200':
+          description: Ranked nearest feasible locations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationResponse'
+              example:
+                batchId: 25
+                strategy: nearest_feasible
+                feasibleCount: 1
+                recommendations:
+                - rank: 1
+                  locationId: 7
+                  locationCode: A-01-01
+                  distanceMeters: 8
+                  explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
+        '400':
+          description: topN must be between 1 and 100; response body is determined by Spring Boot error configuration.
+        '404':
+          description: Batch not found; response body is determined by Spring Boot error configuration.
+      parameters:
+      - name: batchId
+        in: path
+        required: true
+        description: Identifier
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      - name: topN
+        in: query
+        required: false
+        description: Maximum number of recommendations (default 5, allowed 1–100).
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 5
+        example: 5
+      description: Ranks feasible active storage locations by distance to the product outbound destination (PICKING
+        or SHIPPING), with location code and ID tie-breakers. This is not yet the planned multi-criteria strategy.
+        If none is feasible, returns 200 with feasibleCount=0 and an empty recommendations array.
+components:
+  schemas:
+    CreateProductRequest:
+      type: object
+      properties:
+        warehouseId:
+          type: integer
+          format: int64
+          example: 1
+        sku:
+          type: string
+          example: SKU-001
+        name:
+          type: string
+          example: Example product
+        lengthMm:
+          type: integer
+          minimum: 1
+          example: 200
+        widthMm:
+          type: integer
+          minimum: 1
+          example: 150
+        heightMm:
+          type: integer
+          minimum: 1
+          example: 100
+        unitWeightKg:
+          type: number
+          exclusiveMinimum: 0
+          example: 1.25
+        compatibilityGroupId:
+          type: integer
+          format: int64
+          nullable: true
+          example: null
+        shelfLifeDays:
+          type: integer
+          minimum: 1
+          nullable: true
+          example: 90
+        outboundFlow:
+          type: string
+          enum:
+          - PICKING
+          - SHIPPING
+          example: PICKING
+      required:
+      - warehouseId
+      - sku
+      - name
+      - lengthMm
+      - widthMm
+      - heightMm
+      - unitWeightKg
+      - outboundFlow
+    ProductResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 10
+        sku:
+          type: string
+          example: SKU-001
+        name:
+          type: string
+          example: Example product
+        unitVolumeDm3:
+          type: number
+          example: 3
+        unitWeightKg:
+          type: number
+          example: 1.25
+    CreateBatchRequest:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+          example: 10
+        batchCode:
+          type: string
+          example: BATCH-001
+        quantity:
+          type: integer
+          minimum: 1
+          example: 12
+        receivingDate:
+          type: string
+          format: date
+          example: '2026-11-22'
+        expiryDate:
+          type: string
+          format: date
+          nullable: true
+          example: '2027-02-20'
+      required:
+      - productId
+      - batchCode
+      - quantity
+      - receivingDate
+    BatchResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 25
+        batchCode:
+          type: string
+          example: BATCH-001
+        quantity:
+          type: integer
+          example: 12
+        volumeDm3:
+          type: number
+          example: 36
+        weightKg:
+          type: number
+          example: 15
+        receivingDate:
+          type: string
+          format: date
+          example: '2026-11-22'
+        expiryDate:
+          type: string
+          format: date
+          nullable: true
+          example: '2027-02-20'
+        status:
+          type: string
+          enum:
+          - AWAITING_PUTAWAY
+          - PLACED
+          example: AWAITING_PUTAWAY
+    LocationResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 7
+        code:
+          type: string
+          example: A-01-01
+        zoneId:
+          type: integer
+          format: int64
+          example: 2
+        capacityDm3:
+          type: number
+          example: 500
+        occupiedDm3:
+          type: number
+          example: 100
+        maxWeightKg:
+          type: number
+          example: 250
+        distanceToReceivingM:
+          type: number
+          example: 15
+        distanceToPickingM:
+          type: number
+          example: 8
+        distanceToShippingM:
+          type: number
+          example: 20
+        active:
+          type: boolean
+          example: true
+    RunClassificationRequest:
+      type: object
+      properties:
+        warehouseId:
+          type: integer
+          format: int64
+          example: 1
+        windowStart:
+          type: string
+          format: date
+          example: '2026-10-01'
+        windowEnd:
+          type: string
+          format: date
+          example: '2026-10-31'
+    ProductClassification:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+          example: 10
+        sku:
+          type: string
+          example: SKU-001
+        abcClass:
+          type: string
+          enum:
+          - A
+          - B
+          - C
+          example: A
+        xyzClass:
+          type: string
+          enum:
+          - X
+          - Y
+          - Z
+          nullable: true
+          example: X
+        movementCount:
+          type: integer
+          format: int64
+          example: 40
+        cumulativeShare:
+          type: number
+          nullable: true
+          example: 0.8
+        cv:
+          type: number
+          nullable: true
+          example: 0.32
+        note:
+          type: string
+          nullable: true
+          example: null
+    ClassificationResult:
+      type: object
+      properties:
+        runId:
+          type: integer
+          format: int64
+          example: 5
+        warehouseId:
+          type: integer
+          format: int64
+          example: 1
+        windowStart:
+          type: string
+          format: date
+          example: '2026-10-01'
+        windowEnd:
+          type: string
+          format: date
+          example: '2026-10-31'
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductClassification'
+    ConstraintCheckResponse:
+      type: object
+      properties:
+        batchId:
+          type: integer
+          format: int64
+          example: 25
+        locationId:
+          type: integer
+          format: int64
+          example: 7
+        locationCode:
+          type: string
+          example: A-01-01
+        feasible:
+          type: boolean
+          example: true
+        rejectionReasons:
+          type: array
+          items:
+            type: string
+          example: []
+    RecommendationItemResponse:
+      type: object
+      properties:
+        rank:
+          type: integer
+          example: 1
+        locationId:
+          type: integer
+          format: int64
+          example: 7
+        locationCode:
+          type: string
+          example: A-01-01
+        distanceMeters:
+          type: number
+          example: 8
+        explanation:
+          type: string
+          example: Passes hard constraints; nearest feasible location by distance to picking (m)
+    RecommendationResponse:
+      type: object
+      properties:
+        batchId:
+          type: integer
+          format: int64
+          example: 25
+        strategy:
+          type: string
+          example: nearest_feasible
+        feasibleCount:
+          type: integer
+          example: 3
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecommendationItemResponse'
+    ProblemDetail:
+      type: object
+      properties:
+        type:
+          type: string
+          example: about:blank
+        title:
+          type: string
+          example: Bad Request
+        status:
+          type: integer
+          example: 400
+        detail:
+          type: string
+          example: Invalid warehouse or date range
+        instance:
+          type: string
+          example: /api/classifications/run
