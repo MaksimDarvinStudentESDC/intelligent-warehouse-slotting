@@ -1,4 +1,23 @@
-import {forwardRef,type InputHTMLAttributes} from 'react';
-type Props=InputHTMLAttributes<HTMLInputElement>&{label:string;error?:string;hint?:string};
-const Input=forwardRef<HTMLInputElement,Props>(function Input({label,error,hint,id,className='',...props},ref){const inputId=id||props.name;if(!inputId)throw new Error('Input requires id or name');return <div className="ui-field"><label className="ui-label" htmlFor={inputId}>{label}</label><input {...props} ref={ref} id={inputId} className={`ui-input ${className}`.trim()} aria-invalid={!!error} aria-describedby={[hint?`${inputId}-hint`:null,error?`${inputId}-error`:null].filter(Boolean).join(' ')||undefined}/>{hint&&<div className="ui-hint" id={`${inputId}-hint`}>{hint}</div>}{error&&<div className="ui-field-error" id={`${inputId}-error`} role="alert">{error}</div>}</div>});
+import {forwardRef, type InputHTMLAttributes} from 'react';
+
+type Props = InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string; hint?: string };
+const Input = forwardRef<HTMLInputElement, Props>(function Input({
+                                                                     label,
+                                                                     error,
+                                                                     hint,
+                                                                     id,
+                                                                     className = '',
+                                                                     ...props
+                                                                 }, ref) {
+    const inputId = id || props.name;
+    if (!inputId) throw new Error('Input requires id or name');
+    return <div className="ui-field"><label className="ui-label" htmlFor={inputId}>{label}</label><input {...props}
+                                                                                                         ref={ref}
+                                                                                                         id={inputId}
+                                                                                                         className={`ui-input ${className}`.trim()}
+                                                                                                         aria-invalid={!!error}
+                                                                                                         aria-describedby={[hint ? `${inputId}-hint` : null, error ? `${inputId}-error` : null].filter(Boolean).join(' ') || undefined}/>{hint &&
+        <div className="ui-hint" id={`${inputId}-hint`}>{hint}</div>}{error &&
+        <div className="ui-field-error" id={`${inputId}-error`} role="alert">{error}</div>}</div>
+});
 export default Input;

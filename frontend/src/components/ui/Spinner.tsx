@@ -1,2 +1,16 @@
-import {LoaderCircle} from 'lucide-react';
-export default function Spinner({label='Loading…'}:{label?:string}){return <span className="ui-spinner" role="status"><LoaderCircle className="ui-spin" size={19} aria-hidden="true"/>{label}</span>}
+import { LoaderCircle } from 'lucide-react';
+
+interface SpinnerProps {
+    label?: string;
+}
+
+export default function Spinner({
+                                    label = 'Loading...',
+                                }: SpinnerProps) {
+    return (
+        <span className="spinner" role="status">
+      <LoaderCircle size={18} aria-hidden="true" />
+            {label}
+    </span>
+    );
+}
