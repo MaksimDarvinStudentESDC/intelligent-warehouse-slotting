@@ -2,9 +2,9 @@ openapi: 3.0.3
 info:
   title: Intelligent Warehouse Slotting Optimization System API
   version: 0.1.0
-  description: Current implemented REST API, documented from the uploaded Java source. Recommendations currently
-    use nearest_feasible, not the planned multi-criteria optimizer. Error bodies depend on Spring Boot configuration;
-    examples below show messages from ResponseStatusException, not a guaranteed wire format.
+  description: Documented REST API for the current implementation. Recommendations use nearest_feasible. Default
+    Spring Boot error bodies are shown as observed in manual tests; detailed validation messages are not currently
+    included in the response body.
 servers:
 - url: http://localhost:8080
   description: Local development
@@ -28,18 +28,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProductResponse'
               example:
-                id: 10
-                sku: SKU-001
-                name: Example product
-                unitVolumeDm3: 3
-                unitWeightKg: 1.25
+                id: 5
+                sku: API-TEST-003
+                name: Warehouse API Test Product
+                unitVolumeDm3: 9
+                unitWeightKg: 2.5
         '400':
           description: Invalid request or compatibility group; response body is determined by Spring Boot error
             configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 400
+                error: Bad Request
+                path: /api/products
         '404':
           description: Warehouse not found; response body is determined by Spring Boot error configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 404
+                error: Not Found
+                path: /api/products
         '409':
           description: SKU already exists in warehouse; response body is determined by Spring Boot error configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 409
+                error: Conflict
+                path: /api/products
       requestBody:
         required: true
         content:
@@ -70,22 +97,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/BatchResponse'
               example:
-                id: 25
-                batchCode: BATCH-001
-                quantity: 12
-                volumeDm3: 36
-                weightKg: 15
+                id: 5
+                batchCode: API-BATCH-001
+                quantity: 50
+                volumeDm3: 450
+                weightKg: 125
                 receivingDate: '2026-11-22'
-                expiryDate: '2027-02-20'
+                expiryDate: '2027-11-22'
                 status: AWAITING_PUTAWAY
         '400':
-          description: Invalid request, archived product or expiry date not after receiving date; response body
-            is determined by Spring Boot error configuration.
+          description: Invalid request, archived product or expiry date not after receiving date; response
+            body is determined by Spring Boot error configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 400
+                error: Bad Request
+                path: /api/batches
         '404':
           description: Product not found; response body is determined by Spring Boot error configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 404
+                error: Not Found
+                path: /api/batches
         '409':
           description: Batch code already exists in warehouse; response body is determined by Spring Boot error
             configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 409
+                error: Conflict
+                path: /api/batches
       requestBody:
         required: true
         content:
@@ -177,24 +231,58 @@ paths:
               schema:
                 $ref: '#/components/schemas/ClassificationResult'
               example:
-                runId: 5
+                runId: 2
                 warehouseId: 1
                 windowStart: '2026-10-01'
-                windowEnd: '2026-10-31'
+                windowEnd: '2026-11-22'
                 products:
-                - productId: 10
-                  sku: SKU-001
+                - productId: 1
+                  sku: DEMO-001
                   abcClass: A
                   xyzClass: X
-                  movementCount: 40
-                  cumulativeShare: 0.8
-                  cv: 0.32
+                  movementCount: 969
+                  cumulativeShare: 0.67715
+                  cv: 0.2004
                   note: null
+                - productId: 2
+                  sku: POSTMAN-001
+                  abcClass: A
+                  xyzClass: Y
+                  movementCount: 462
+                  cumulativeShare: 1
+                  cv: 0.5489
+                  note: null
+                - productId: 5
+                  sku: API-TEST-003
+                  abcClass: C
+                  xyzClass: null
+                  movementCount: 0
+                  cumulativeShare: 1
+                  cv: null
+                  note: no data
         '400':
-          description: Missing/invalid date range, too long a window, or warehouse is not LIVE; response body is
-            determined by Spring Boot error configuration.
+          description: Missing/invalid date range, too long a window, or warehouse is not LIVE; response body
+            is determined by Spring Boot error configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 400
+                error: Bad Request
+                path: /api/classifications/run
         '404':
           description: Warehouse not found; response body is determined by Spring Boot error configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 404
+                error: Not Found
+                path: /api/classifications/run
       requestBody:
         required: true
         content:
@@ -205,8 +293,8 @@ paths:
               warehouseId: 1
               windowStart: '2026-10-01'
               windowEnd: '2026-10-31'
-      description: Date window is inclusive; maximum allowed difference between dates is 3650 days. Request fields
-        are checked in the service rather than Jakarta Bean Validation.
+      description: Date window is inclusive; maximum allowed difference between dates is 3650 days. Request
+        fields are checked in the service rather than Jakarta Bean Validation.
   /api/constraints/batches/{batchId}/locations/{locationId}:
     get:
       tags:
@@ -228,6 +316,15 @@ paths:
                 - INSUFFICIENT_VOLUME
         '404':
           description: Batch or location not found; response body is determined by Spring Boot error configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 404
+                error: Not Found
+                path: /api/constraints/batches/5/locations/1
       parameters:
       - name: batchId
         in: path
@@ -261,19 +358,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/RecommendationResponse'
               example:
-                batchId: 25
+                batchId: 5
                 strategy: nearest_feasible
-                feasibleCount: 1
+                feasibleCount: 4
                 recommendations:
                 - rank: 1
-                  locationId: 7
-                  locationCode: A-01-01
-                  distanceMeters: 8
+                  locationId: 9
+                  locationCode: ST-09
+                  distanceMeters: 35
+                  explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
+                - rank: 2
+                  locationId: 10
+                  locationCode: ST-10
+                  distanceMeters: 40
+                  explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
+                - rank: 3
+                  locationId: 11
+                  locationCode: ST-11
+                  distanceMeters: 45
+                  explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
+                - rank: 4
+                  locationId: 12
+                  locationCode: ST-12
+                  distanceMeters: 55
                   explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
         '400':
           description: topN must be between 1 and 100; response body is determined by Spring Boot error configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 400
+                error: Bad Request
+                path: /api/recommendations/batches/5
         '404':
           description: Batch not found; response body is determined by Spring Boot error configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 404
+                error: Not Found
+                path: /api/recommendations/batches/5
       parameters:
       - name: batchId
         in: path
@@ -293,9 +423,9 @@ paths:
           maximum: 100
           default: 5
         example: 5
-      description: Ranks feasible active storage locations by distance to the product outbound destination (PICKING
-        or SHIPPING), with location code and ID tie-breakers. This is not yet the planned multi-criteria strategy.
-        If none is feasible, returns 200 with feasibleCount=0 and an empty recommendations array.
+      description: Ranks feasible active storage locations by distance to the product outbound destination
+        (PICKING or SHIPPING), with location code and ID tie-breakers. This is not yet the planned multi-criteria
+        strategy. If none is feasible, returns 200 with feasibleCount=0 and an empty recommendations array.
 components:
   schemas:
     CreateProductRequest:
@@ -623,3 +753,26 @@ components:
         instance:
           type: string
           example: /api/classifications/run
+    SpringBootErrorResponse:
+      type: object
+      description: Default Spring Boot error response observed in the dev environment. Additional fields may
+        depend on configuration.
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-11-22T15:44:14.268+00:00'
+        status:
+          type: integer
+          example: 400
+        error:
+          type: string
+          example: Bad Request
+        path:
+          type: string
+          example: /api/recommendations/batches/5
+      required:
+      - timestamp
+      - status
+      - error
+      - path

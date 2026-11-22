@@ -1,0 +1,4 @@
+import {forwardRef,type SelectHTMLAttributes} from 'react';
+type Props=SelectHTMLAttributes<HTMLSelectElement>&{label:string;error?:string;options:{value:string;label:string}[]};
+const Select=forwardRef<HTMLSelectElement,Props>(function Select({label,error,options,id,className='',...props},ref){const selectId=id||props.name;if(!selectId)throw new Error('Select requires id or name');return <div className="ui-field"><label className="ui-label" htmlFor={selectId}>{label}</label><select {...props} ref={ref} id={selectId} className={`ui-input ${className}`.trim()} aria-invalid={!!error} aria-describedby={error?`${selectId}-error`:undefined}>{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select>{error&&<div className="ui-field-error" id={`${selectId}-error`} role="alert">{error}</div>}</div>});
+export default Select;

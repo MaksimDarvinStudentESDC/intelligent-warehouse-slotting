@@ -68,10 +68,21 @@ With the backend running:
 | Resource | Local URL |
 |---|---|
 | Interactive Swagger UI | <http://localhost:8080/swagger-ui/index.html> |
-| Generated OpenAPI JSON | <http://localhost:8080/v3/api-docs> |
+| Maintained OpenAPI YAML (served by backend) | <http://localhost:8080/openapi.yaml> |
+| Automatically generated OpenAPI JSON (separate) | <http://localhost:8080/v3/api-docs> |
 | API base URL | <http://localhost:8080> |
 
-The repository also contains a maintained **OpenAPI YAML** contract at [`openapi.yaml`](./openapi.yaml). The Swagger UI currently displays the **generated** `/v3/api-docs` definition; changes to the YAML file are **not automatically reflected** in Swagger UI unless it is explicitly configured to load that file or equivalent annotations are added to the Java controllers.
+The maintained API contract is [`openapi.yaml`](./openapi.yaml). **Swagger UI is configured to load `/openapi.yaml`**, served from `backend/src/main/resources/static/openapi.yaml`. This configuration was verified in Swagger UI: the page displays **Intelligent Warehouse Slotting Optimization System API**, version **0.1.0**, with the OpenAPI 3.0 specification and documented response codes. The `/v3/api-docs` endpoint is a **separate, automatically generated** description and is not the source currently displayed in Swagger UI.
+
+The relevant Spring Boot configuration is:
+
+```properties
+springdoc.swagger-ui.path=/swagger-ui.html
+springdoc.swagger-ui.url=/openapi.yaml
+springdoc.swagger-ui.disable-swagger-default-url=true
+```
+
+**Keep both YAML copies synchronized:** after updating `docs/api/openapi.yaml`, copy it to `backend/src/main/resources/static/openapi.yaml` and restart the backend. Otherwise Swagger UI may show an older contract.
 
 In Swagger UI, expand an operation, choose **Try it out**, supply parameters or JSON, and select **Execute**. Check the actual **Server response** status code rather than relying only on the generated example.
 
@@ -125,7 +136,7 @@ A sample response shape (illustrative ID):
 }
 ```
 
-For the full workflow (create product → create batch → list locations → check constraints → request recommendations → run classification), see [`integration-tutorial.md`](./integration-tutorial.md) once added.
+For the full workflow (create product → create batch → list locations → check constraints → request recommendations → run classification), see the completed [`integration-tutorial.md`](./integration-tutorial.md).
 
 ## 7. HTTP status codes and error responses
 
@@ -149,7 +160,7 @@ A typical observed Spring Boot error body:
 }
 ```
 
-The current error payload **does not consistently include a field-level explanation**. The `timestamp` and `path` change per request. Swagger UI may label actual `201`, `400`, or `404` results as **Undocumented** when the generated definition does not declare those responses. This is a documentation gap, not proof that the request failed.
+The observed Spring Boot error payload **does not include field-level validation details**. The `timestamp` varies per request and `path` depends on the endpoint. The maintained OpenAPI contract now documents the relevant `201`, `400`, and `404` responses, and these descriptions have been verified in Swagger UI. A documented response code describes the API contract; it does not by itself prove that every error scenario has been exercised. See [`error-handling.md`](./error-handling.md) for details. The `409 Conflict` response is documented as a potential contract response but has **not** been confirmed by manual testing.
 
 See [`validation-results.md`](./validation-results.md) for manually observed test results. For the complete request/response schemas and documented status codes, see [`openapi.yaml`](./openapi.yaml).
 
@@ -160,7 +171,8 @@ See [`validation-results.md`](./validation-results.md) for manually observed tes
 | Backend fails during startup | PostgreSQL running on host port `5433`; `DB_URL`; credentials; migration privileges; Flyway logs |
 | `400` on product creation | Required fields, positive dimensions/weight, allowed `outboundFlow` (`PICKING` or `SHIPPING`) |
 | `404` for a batch or location | Use IDs that actually exist in the current database |
-| Swagger UI says `Undocumented` | Compare generated `/v3/api-docs` with the repository's maintained `openapi.yaml` |
+| Swagger UI shows `OpenAPI definition` or `/v3/api-docs` | Confirm `springdoc.swagger-ui.url=/openapi.yaml`, check that the static YAML exists, restart backend, then hard-refresh Swagger UI |
+| Swagger UI shows outdated examples or `Undocumented` | Verify that `docs/api/openapi.yaml` matches `backend/src/main/resources/static/openapi.yaml`; confirm the UI is loading `/openapi.yaml` |
 | No feasible recommendations | Check volume, weight, active status, and other hard constraints; `feasibleCount` may be zero |
 | Classification has `xyzClass: null` | A product may lack sufficient movement history; see the returned `note` |
 

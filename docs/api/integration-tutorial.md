@@ -274,7 +274,6 @@ The observed error body uses Spring Boot's standard fields (`timestamp`, `status
 }
 ```
 
-The timestamp is illustrative and changes with each request. Swagger UI may label these responses `Undocumented` until the generated OpenAPI definition is updated.
 
 ## Completion checklist
 

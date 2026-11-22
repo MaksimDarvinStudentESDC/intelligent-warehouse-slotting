@@ -1,4 +1,4 @@
-[README (3).md](../../../Users/darvi/Downloads/README%20%283%29.md)# API Validation Results
+# API Validation Results
 
 **Project:** Intelligent Warehouse Slotting Optimization System  
 **Test date:** 2026-11-22  
