@@ -1,9 +1,11 @@
 package com.warehouse.slotting.service;
 
+import com.warehouse.slotting.exception.UseCaseException;
 import com.warehouse.slotting.entity.OutboundFlow;
 import com.warehouse.slotting.entity.Product;
 import com.warehouse.slotting.entity.Warehouse;
 import com.warehouse.slotting.entity.WarehouseKind;
+import com.warehouse.slotting.repository.ClassificationRepository;
 import com.warehouse.slotting.repository.ProductRepository;
 import com.warehouse.slotting.repository.WarehouseRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,11 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.sql.Date;
@@ -40,7 +40,7 @@ class ClassificationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ClassificationService(jdbc, products, warehouses);
+        service = new ClassificationService(new ClassificationRepository(jdbc), products, warehouses);
     }
 
     private void liveWarehouse() {
@@ -75,32 +75,32 @@ class ClassificationServiceTest {
 
     @Test
     void rejectsInvalidDatesBeforeDatabaseAccess() {
-        assertEquals(HttpStatus.BAD_REQUEST,
-                assertThrows(ResponseStatusException.class,
-                        () -> service.run(1L, end, start)).getStatusCode());
-        assertEquals(HttpStatus.BAD_REQUEST,
-                assertThrows(ResponseStatusException.class,
-                        () -> service.run(null, start, end)).getStatusCode());
-        assertEquals(HttpStatus.BAD_REQUEST,
-                assertThrows(ResponseStatusException.class,
-                        () -> service.run(1L, null, end)).getStatusCode());
+        assertEquals(UseCaseException.Kind.INVALID_INPUT,
+                assertThrows(UseCaseException.class,
+                        () -> service.run(1L, end, start)).kind());
+        assertEquals(UseCaseException.Kind.INVALID_INPUT,
+                assertThrows(UseCaseException.class,
+                        () -> service.run(null, start, end)).kind());
+        assertEquals(UseCaseException.Kind.INVALID_INPUT,
+                assertThrows(UseCaseException.class,
+                        () -> service.run(1L, null, end)).kind());
         verifyNoInteractions(jdbc, warehouses, products);
     }
 
     @Test
     void rejectsExcessivelyLongWindow() {
-        assertEquals(HttpStatus.BAD_REQUEST,
-                assertThrows(ResponseStatusException.class,
-                        () -> service.run(1L, start, start.plusDays(3651))).getStatusCode());
+        assertEquals(UseCaseException.Kind.INVALID_INPUT,
+                assertThrows(UseCaseException.class,
+                        () -> service.run(1L, start, start.plusDays(3651))).kind());
         verifyNoInteractions(jdbc, warehouses, products);
     }
 
     @Test
     void returnsNotFoundForUnknownWarehouse() {
         when(warehouses.findById(99L)).thenReturn(Optional.empty());
-        assertEquals(HttpStatus.NOT_FOUND,
-                assertThrows(ResponseStatusException.class,
-                        () -> service.run(99L, start, end)).getStatusCode());
+        assertEquals(UseCaseException.Kind.NOT_FOUND,
+                assertThrows(UseCaseException.class,
+                        () -> service.run(99L, start, end)).kind());
         verifyNoInteractions(jdbc, products);
     }
 
@@ -108,9 +108,9 @@ class ClassificationServiceTest {
     void rejectsPersistedRunForSimulationWarehouse() {
         when(warehouses.findById(1L))
                 .thenReturn(Optional.of(new Warehouse("Test", WarehouseKind.SIMULATION)));
-        assertEquals(HttpStatus.BAD_REQUEST,
-                assertThrows(ResponseStatusException.class,
-                        () -> service.run(1L, start, end)).getStatusCode());
+        assertEquals(UseCaseException.Kind.INVALID_INPUT,
+                assertThrows(UseCaseException.class,
+                        () -> service.run(1L, start, end)).kind());
         verifyNoInteractions(jdbc, products);
     }
 

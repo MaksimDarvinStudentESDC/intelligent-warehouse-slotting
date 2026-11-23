@@ -1,5 +1,6 @@
 package com.warehouse.slotting.service;
 
+import com.warehouse.slotting.exception.UseCaseException;
 import com.warehouse.slotting.dto.ConstraintCheckResponse;
 import com.warehouse.slotting.dto.RecommendationResponse;
 import com.warehouse.slotting.entity.*;
@@ -10,10 +11,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
+import com.warehouse.slotting.repository.LatestProductClassificationRepository;
+import com.warehouse.slotting.repository.LatestProductClassificationRepository.ProductClasses;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -34,7 +35,8 @@ class RecommendationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new RecommendationService(batches, locations, constraints, jdbc);
+        service = new RecommendationService(batches, locations, constraints,
+                List.of(new NearestFeasibleStrategy(), new WeightedScoreStrategy(new LatestProductClassificationRepository(jdbc))));
     }
 
     private Location location(long id, int distance, int freeVolume) {
@@ -69,7 +71,7 @@ class RecommendationServiceTest {
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void classification(String abc, String xyz) {
         when(jdbc.query(anyString(), any(RowMapper.class), eq(1L), eq(1L)))
-                .thenReturn(List.<String[]>of(new String[]{abc, xyz}));
+                .thenReturn(List.of(new ProductClasses(abc, xyz)));
     }
 
     @Test
@@ -131,33 +133,33 @@ class RecommendationServiceTest {
 
     @Test
     void invalidStrategyReturnsBadRequest() {
-        var error = assertThrows(ResponseStatusException.class,
+        var error = assertThrows(UseCaseException.class,
                 () -> service.recommend(1L, 5, "unknown"));
-        assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
+        assertEquals(UseCaseException.Kind.INVALID_INPUT, error.kind());
         verifyNoInteractions(batches, locations, constraints, jdbc);
     }
 
     @Test
     void topNOutsideRangeReturnsBadRequest() {
-        assertEquals(HttpStatus.BAD_REQUEST,
-                assertThrows(ResponseStatusException.class,
-                        () -> service.recommend(1L, 0, "weighted_score")).getStatusCode());
+        assertEquals(UseCaseException.Kind.INVALID_INPUT,
+                assertThrows(UseCaseException.class,
+                        () -> service.recommend(1L, 0, "weighted_score")).kind());
     }
 
     @Test
     void missingBatchReturnsNotFound() {
         when(batches.findById(99L)).thenReturn(Optional.empty());
-        assertEquals(HttpStatus.NOT_FOUND,
-                assertThrows(ResponseStatusException.class,
-                        () -> service.recommend(99L, 5, "weighted_score")).getStatusCode());
+        assertEquals(UseCaseException.Kind.NOT_FOUND,
+                assertThrows(UseCaseException.class,
+                        () -> service.recommend(99L, 5, "weighted_score")).kind());
     }
 
     @Test
     void expiredBatchIsRejectedForWeightedScore() {
         setupBatch(LocalDate.now().minusDays(1), location(1, 10, 20));
-        assertEquals(HttpStatus.BAD_REQUEST,
-                assertThrows(ResponseStatusException.class,
-                        () -> service.recommend(1L, 5, "weighted_score")).getStatusCode());
+        assertEquals(UseCaseException.Kind.INVALID_INPUT,
+                assertThrows(UseCaseException.class,
+                        () -> service.recommend(1L, 5, "weighted_score")).kind());
         verifyNoInteractions(jdbc);
     }
 }

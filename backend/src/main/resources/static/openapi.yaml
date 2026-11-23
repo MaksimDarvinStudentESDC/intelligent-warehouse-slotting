@@ -349,41 +349,78 @@ paths:
     get:
       tags:
       - Recommendations
-      summary: List nearest feasible locations
+      summary: Rank feasible locations using nearest-feasible or weighted scoring
       responses:
         '200':
-          description: Ranked nearest feasible locations
+          description: Ranked feasible locations for the selected strategy; weighted_score items include scoreBreakdown.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecommendationResponse'
-              example:
-                batchId: 5
-                strategy: nearest_feasible
-                feasibleCount: 4
-                recommendations:
-                - rank: 1
-                  locationId: 9
-                  locationCode: ST-09
-                  distanceMeters: 35
-                  explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
-                - rank: 2
-                  locationId: 10
-                  locationCode: ST-10
-                  distanceMeters: 40
-                  explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
-                - rank: 3
-                  locationId: 11
-                  locationCode: ST-11
-                  distanceMeters: 45
-                  explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
-                - rank: 4
-                  locationId: 12
-                  locationCode: ST-12
-                  distanceMeters: 55
-                  explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
+              examples:
+                nearestFeasible:
+                  summary: Default distance-based ranking
+                  value:
+                    batchId: 5
+                    strategy: nearest_feasible
+                    feasibleCount: 4
+                    recommendations:
+                    - rank: 1
+                      locationId: 9
+                      locationCode: ST-09
+                      distanceMeters: 35
+                      explanation: Passes hard constraints; nearest feasible location by distance to picking
+                        (m)
+                      scoreBreakdown: null
+                    - rank: 2
+                      locationId: 10
+                      locationCode: ST-10
+                      distanceMeters: 40
+                      explanation: Passes hard constraints; nearest feasible location by distance to picking
+                        (m)
+                      scoreBreakdown: null
+                    - rank: 3
+                      locationId: 11
+                      locationCode: ST-11
+                      distanceMeters: 45
+                      explanation: Passes hard constraints; nearest feasible location by distance to picking
+                        (m)
+                      scoreBreakdown: null
+                    - rank: 4
+                      locationId: 12
+                      locationCode: ST-12
+                      distanceMeters: 55
+                      explanation: Passes hard constraints; nearest feasible location by distance to picking
+                        (m)
+                      scoreBreakdown: null
+                weightedScore:
+                  summary: Illustrative weighted ranking (scores depend on current data and evaluation date)
+                  value:
+                    batchId: 5
+                    strategy: weighted_score
+                    feasibleCount: 4
+                    recommendations:
+                    - rank: 1
+                      locationId: 9
+                      locationCode: ST-09
+                      distanceMeters: 35
+                      explanation: Passes hard constraints; weighted score uses distance, ABC/XYZ, expiry accessibility
+                        and volume fit
+                      scoreBreakdown:
+                        distance: 1.0
+                        classification: 0.5
+                        expiry: 0.5
+                        utilization: 1.0
+                        distanceContribution: 0.35
+                        classificationContribution: 0.125
+                        expiryContribution: 0.125
+                        utilizationContribution: 0.15
+                        total: 0.75
+                        classificationMissing: true
+                        expiryUnknown: true
         '400':
-          description: topN must be between 1 and 100; response body is determined by Spring Boot error configuration.
+          description: Invalid topN (outside 1–100), unknown strategy, or expired batch with weighted_score.
+            The error body depends on Spring Boot configuration.
           content:
             application/json:
               schema:
@@ -394,7 +431,7 @@ paths:
                 error: Bad Request
                 path: /api/recommendations/batches/5
         '404':
-          description: Batch not found; response body is determined by Spring Boot error configuration.
+          description: Batch not found. The error body depends on Spring Boot configuration.
           content:
             application/json:
               schema:
@@ -423,9 +460,23 @@ paths:
           maximum: 100
           default: 5
         example: 5
-      description: Ranks feasible active storage locations by distance to the product outbound destination
-        (PICKING or SHIPPING), with location code and ID tie-breakers. This is not yet the planned multi-criteria
-        strategy. If none is feasible, returns 200 with feasibleCount=0 and an empty recommendations array.
+      - name: strategy
+        in: query
+        required: false
+        description: Ranking strategy. Default nearest_feasible. Unknown values return HTTP 400.
+        schema:
+          type: string
+          enum:
+          - nearest_feasible
+          - weighted_score
+          default: nearest_feasible
+        example: weighted_score
+      description: Evaluates hard constraints before ranking locations. The default strategy nearest_feasible
+        orders feasible locations by distance to the product outbound flow (PICKING or SHIPPING). The weighted_score
+        strategy uses distance (35%), ABC/XYZ classification (25%), expiry accessibility (25%), and volume
+        fit (15%). For weighted_score, scoreBreakdown explains the normalized components and weighted contributions.
+        If no locations are feasible, returns 200 with an empty recommendations list. feasibleCount counts
+        hard-constraint-feasible locations; weighted_score may omit locations with missing scoring inputs.
 components:
   schemas:
     CreateProductRequest:
@@ -718,6 +769,12 @@ components:
         explanation:
           type: string
           example: Passes hard constraints; nearest feasible location by distance to picking (m)
+          description: Human-readable ranking explanation; varies by strategy.
+        scoreBreakdown:
+          nullable: true
+          allOf:
+          - $ref: '#/components/schemas/ScoreBreakdown'
+          description: Detailed weighted-score components; null for nearest_feasible.
     RecommendationResponse:
       type: object
       properties:
@@ -727,7 +784,10 @@ components:
           example: 25
         strategy:
           type: string
-          example: nearest_feasible
+          enum:
+          - nearest_feasible
+          - weighted_score
+          example: weighted_score
         feasibleCount:
           type: integer
           example: 3
@@ -776,3 +836,57 @@ components:
       - status
       - error
       - path
+    ScoreBreakdown:
+      type: object
+      description: Normalized score components (0–1), weighted contributions, total and missing-data flags.
+        The score is calculated for weighted_score only.
+      properties:
+        distance:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        classification:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        expiry:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        utilization:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        distanceContribution:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        classificationContribution:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        expiryContribution:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        utilizationContribution:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        total:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        classificationMissing:
+          type: boolean
+        expiryUnknown:
+          type: boolean

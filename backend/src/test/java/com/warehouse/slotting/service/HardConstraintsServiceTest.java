@@ -1,5 +1,6 @@
 package com.warehouse.slotting.service;
 
+import com.warehouse.slotting.exception.UseCaseException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.warehouse.slotting.dto.ConstraintCheckResponse;
@@ -11,9 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
+import com.warehouse.slotting.repository.CompatibilityConflictRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -39,7 +39,7 @@ class HardConstraintsServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new HardConstraintsService(batches, locations, jdbc);
+        service = new HardConstraintsService(batches, locations, new CompatibilityConflictRepository(jdbc));
 
         // Lenient baseline: each test changes only the property relevant to its scenario.
         lenient().when(batches.findById(1L)).thenReturn(Optional.of(batch));
@@ -150,17 +150,17 @@ class HardConstraintsServiceTest {
     @Test
     void rejectsUnknownBatchWith404() {
         when(batches.findById(1L)).thenReturn(Optional.empty());
-        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+        UseCaseException error = assertThrows(UseCaseException.class,
                 () -> service.check(1L, 6L));
-        assertEquals(HttpStatus.NOT_FOUND, error.getStatusCode());
+        assertEquals(UseCaseException.Kind.NOT_FOUND, error.kind());
     }
 
     @Test
     void rejectsUnknownLocationWith404() {
         when(locations.findById(6L)).thenReturn(Optional.empty());
-        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+        UseCaseException error = assertThrows(UseCaseException.class,
                 () -> service.check(1L, 6L));
-        assertEquals(HttpStatus.NOT_FOUND, error.getStatusCode());
+        assertEquals(UseCaseException.Kind.NOT_FOUND, error.kind());
     }
 
     @Test

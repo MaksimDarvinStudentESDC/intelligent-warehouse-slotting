@@ -1,5 +1,6 @@
 package com.warehouse.slotting.service;
 
+import com.warehouse.slotting.exception.UseCaseException;
 import com.warehouse.slotting.dto.CreateBatchRequest;
 import com.warehouse.slotting.dto.CreateProductRequest;
 import com.warehouse.slotting.entity.Batch;
@@ -21,8 +22,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -85,11 +84,11 @@ class CatalogServiceTest {
         when(warehouses.findById(1L)).thenReturn(Optional.of(warehouse));
         when(products.existsByWarehouseIdAndSku(1L, "DEMO-002")).thenReturn(true);
 
-        ResponseStatusException exception = assertThrows(
-                ResponseStatusException.class,
+        UseCaseException exception = assertThrows(
+                UseCaseException.class,
                 () -> service.createProduct(productRequest(null))
         );
-        assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
+        assertEquals(UseCaseException.Kind.CONFLICT, exception.kind());
         verify(products, never()).saveAndFlush(any(Product.class));
     }
 
@@ -98,11 +97,11 @@ class CatalogServiceTest {
         when(warehouses.findById(1L)).thenReturn(Optional.of(warehouse));
         when(groups.findByIdAndWarehouseId(999999L, 1L)).thenReturn(Optional.empty());
 
-        ResponseStatusException exception = assertThrows(
-                ResponseStatusException.class,
+        UseCaseException exception = assertThrows(
+                UseCaseException.class,
                 () -> service.createProduct(productRequest(999999L))
         );
-        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals(UseCaseException.Kind.INVALID_INPUT, exception.kind());
         verify(products, never()).saveAndFlush(any(Product.class));
     }
 
@@ -128,11 +127,11 @@ class CatalogServiceTest {
     void createBatch_rejectsExpiryDateOnReceivingDate() {
         when(products.findById(1L)).thenReturn(Optional.of(product));
 
-        ResponseStatusException exception = assertThrows(
-                ResponseStatusException.class,
+        UseCaseException exception = assertThrows(
+                UseCaseException.class,
                 () -> service.createBatch(batchRequest("BATCH-002", LocalDate.of(2026, 11, 20)))
         );
-        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals(UseCaseException.Kind.INVALID_INPUT, exception.kind());
         verify(batches, never()).saveAndFlush(any(Batch.class));
     }
 
@@ -143,11 +142,11 @@ class CatalogServiceTest {
         when(batches.existsByWarehouseIdAndBatchCode(1L, "BATCH-001"))
                 .thenReturn(true);
 
-        ResponseStatusException exception = assertThrows(
-                ResponseStatusException.class,
+        UseCaseException exception = assertThrows(
+                UseCaseException.class,
                 () -> service.createBatch(batchRequest("BATCH-001", LocalDate.of(2027, 5, 19)))
         );
-        assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
+        assertEquals(UseCaseException.Kind.CONFLICT, exception.kind());
         verify(batches, never()).saveAndFlush(any(Batch.class));
     }
 }

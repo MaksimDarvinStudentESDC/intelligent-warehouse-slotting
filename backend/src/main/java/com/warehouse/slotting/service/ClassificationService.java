@@ -1,19 +1,17 @@
 package com.warehouse.slotting.service;
 
+import com.warehouse.slotting.exception.UseCaseException;
 import com.warehouse.slotting.entity.Product;
 import com.warehouse.slotting.entity.Warehouse;
 import com.warehouse.slotting.entity.WarehouseKind;
+import com.warehouse.slotting.repository.ClassificationRepository;
 import com.warehouse.slotting.repository.ProductRepository;
 import com.warehouse.slotting.repository.WarehouseRepository;
-import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.sql.Date;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -28,14 +26,14 @@ public class ClassificationService {
     private static final double X_MAX = 0.50;
     private static final double Y_MAX = 1.00;
 
-    private final JdbcTemplate jdbc;
+    private final ClassificationRepository classification;
     private final ProductRepository products;
     private final WarehouseRepository warehouses;
     private final ClassificationCalculator calculator = new ClassificationCalculator();
 
-    public ClassificationService(JdbcTemplate jdbc, ProductRepository products,
+    public ClassificationService(ClassificationRepository classification, ProductRepository products,
                                  WarehouseRepository warehouses) {
-        this.jdbc = jdbc;
+        this.classification = classification;
         this.products = products;
         this.warehouses = warehouses;
     }
@@ -51,15 +49,15 @@ public class ClassificationService {
     @Transactional
     public ClassificationResult run(Long warehouseId, LocalDate start, LocalDate end) {
         if (warehouseId == null || start == null || end == null || start.isAfter(end)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid warehouse or date range");
+            throw new UseCaseException(UseCaseException.Kind.INVALID_INPUT, "Invalid warehouse or date range");
         }
         if (java.time.temporal.ChronoUnit.DAYS.between(start, end) > 3650) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Window must not exceed 3651 days");
+            throw new UseCaseException(UseCaseException.Kind.INVALID_INPUT, "Window must not exceed 3651 days");
         }
         Warehouse warehouse = warehouses.findById(warehouseId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Warehouse not found"));
+                .orElseThrow(() -> new UseCaseException(UseCaseException.Kind.NOT_FOUND, "Warehouse not found"));
         if (warehouse.getKind() != WarehouseKind.LIVE) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            throw new UseCaseException(UseCaseException.Kind.INVALID_INPUT,
                     "Persisted classification runs are supported only for LIVE warehouses");
         }
 
@@ -67,19 +65,11 @@ public class ClassificationService {
                 products.findByWarehouseIdAndArchivedFalse(warehouseId));
         Map<Long, Map<LocalDate, Integer>> quantities = new HashMap<>();
         Map<Long, Long> picks = new HashMap<>();
-        jdbc.query("""
-                SELECT h.product_id, h.event_date, h.quantity, h.picks_count
-                FROM outbound_history h
-                JOIN products p ON p.id = h.product_id
-                WHERE p.warehouse_id = ? AND p.is_archived = false
-                  AND h.event_date BETWEEN ? AND ?
-                """, rs -> {
-            long productId = rs.getLong("product_id");
-            LocalDate day = rs.getDate("event_date").toLocalDate();
-            quantities.computeIfAbsent(productId, ignored -> new HashMap<>())
-                    .merge(day, rs.getInt("quantity"), Integer::sum);
-            picks.merge(productId, (long) rs.getInt("picks_count"), Long::sum);
-        }, warehouseId, Date.valueOf(start), Date.valueOf(end));
+        classification.forEachOutboundMovement(warehouseId, start, end, movement -> {
+            quantities.computeIfAbsent(movement.productId(), ignored -> new HashMap<>())
+                    .merge(movement.day(), movement.quantity(), Integer::sum);
+            picks.merge(movement.productId(), (long) movement.picksCount(), Long::sum);
+        });
 
         warehouseProducts.sort(Comparator
                 .comparingLong((Product p) -> picks.getOrDefault(p.getId(), 0L)).reversed()
@@ -87,15 +77,7 @@ public class ClassificationService {
         long totalPicks = warehouseProducts.stream()
                 .mapToLong(p -> picks.getOrDefault(p.getId(), 0L)).sum();
 
-        Long runId = jdbc.queryForObject("""
-                INSERT INTO classification_runs
-                    (warehouse_id, window_start, window_end,
-                     abc_a_share, abc_b_share, cv_x_max, cv_y_max)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                RETURNING id
-                """, Long.class, warehouseId, Date.valueOf(start), Date.valueOf(end),
-                BigDecimal.valueOf(A_SHARE), BigDecimal.valueOf(B_SHARE),
-                BigDecimal.valueOf(X_MAX), BigDecimal.valueOf(Y_MAX));
+        Long runId = classification.createRun(warehouseId, start, end, A_SHARE, B_SHARE, X_MAX, Y_MAX);
 
         List<ProductClassification> results = new ArrayList<>();
         long cumulativePicks = 0;
@@ -119,12 +101,7 @@ public class ClassificationService {
                     : BigDecimal.valueOf(cvValue).setScale(4, RoundingMode.HALF_UP);
             String note = cvValue == null ? "no data" : null;
 
-            jdbc.update("""
-                    INSERT INTO product_classes
-                      (classification_run_id, warehouse_id, product_id, abc_class,
-                       xyz_class, movement_count, cumulative_share, cv, note)
-                    VALUES (?, ?, ?, ?::abc_class, ?::xyz_class, ?, ?, ?, ?)
-                    """, runId, warehouseId, product.getId(), abc.name(),
+            classification.saveProductClasses(runId, warehouseId, product.getId(), abc.name(),
                     xyz == null ? null : xyz.name(), Math.toIntExact(productPicks),
                     cumulativeShare, cv, note);
             results.add(new ProductClassification(product.getId(), product.getSku(),
