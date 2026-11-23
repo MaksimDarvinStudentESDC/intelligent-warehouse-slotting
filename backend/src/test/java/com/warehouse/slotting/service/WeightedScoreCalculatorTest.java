@@ -27,6 +27,7 @@ class WeightedScoreCalculatorTest {
     @Test void classificationAffinityUsesAbcAndXyz() {
         assertEquals(1.0, score("A", "X", null, "10", "1", "2").classification(), 1e-12);
         assertEquals(1.0, score("C", "X", null, "90", "1", "2").classification(), 1e-12);
+        assertEquals(1.0, score("B", "Z", null, "40", "1", "2").classification(), 1e-12);
         assertEquals(0.95, score("B", "Z", null, "45", "1", "2").classification(), 1e-12);
     }
 
