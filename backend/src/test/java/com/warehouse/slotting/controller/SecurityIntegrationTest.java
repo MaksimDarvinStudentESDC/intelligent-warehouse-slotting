@@ -53,7 +53,7 @@ class SecurityIntegrationTest {
         when(recommendations.recommend(1L,5,"nearest_feasible")).thenReturn(new com.warehouse.slotting.dto.RecommendationResponse(1L,"nearest_feasible",0,List.of()));
         var request=request(HttpMethod.valueOf(method),path).header("Authorization","Bearer test-token");
         if (method.equals("POST")) {
-            request.contentType("application/json").content("{}");
+            request.contentType("application/json").content("[]");
         }
         mvc.perform(request).andExpect(status().is(expected));
     }
