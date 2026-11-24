@@ -2,18 +2,23 @@ openapi: 3.0.3
 info:
   title: Intelligent Warehouse Slotting Optimization System API
   version: 0.1.0
-  description: Documented REST API for the current implementation. Recommendations use nearest_feasible. Default
-    Spring Boot error bodies are shown as observed in manual tests; detailed validation messages are not currently
-    included in the response body.
+  description: Documented REST API for the current implementation. Recommendations support nearest_feasible and
+    weighted_score. ApiExceptionHandler maps business exceptions to HTTP 400, 404 or 409 using sendError. Spring
+    Boot renders the error body; detailed exception messages are not guaranteed in JSON.
 servers:
 - url: http://localhost:8080
   description: Local development
 tags:
 - name: Catalog
+  description: Product catalog and incoming batch registration.
 - name: Warehouse
+  description: Warehouse batches and storage locations.
 - name: Classification
+  description: ABC/XYZ demand classification.
 - name: Constraints
+  description: Storage feasibility and hard constraints.
 - name: Recommendations
+  description: Ranked storage location recommendations.
 paths:
   /api/products:
     post:
@@ -84,6 +89,7 @@ paths:
               compatibilityGroupId: null
               shelfLifeDays: 90
               outboundFlow: PICKING
+      operationId: createProduct
   /api/batches:
     post:
       tags:
@@ -106,8 +112,8 @@ paths:
                 expiryDate: '2027-11-22'
                 status: AWAITING_PUTAWAY
         '400':
-          description: Invalid request, archived product or expiry date not after receiving date; response
-            body is determined by Spring Boot error configuration.
+          description: Invalid request, archived product or expiry date not after receiving date; response body
+            is determined by Spring Boot error configuration.
           content:
             application/json:
               schema:
@@ -152,6 +158,7 @@ paths:
               quantity: 12
               receivingDate: '2026-11-22'
               expiryDate: '2027-02-20'
+      operationId: createBatch
   /api/warehouses/{warehouseId}/batches:
     get:
       tags:
@@ -175,6 +182,17 @@ paths:
                 receivingDate: '2026-11-22'
                 expiryDate: '2027-02-20'
                 status: AWAITING_PUTAWAY
+        '400':
+          description: Invalid numeric path parameter; rejected by Spring MVC.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 400
+                error: Bad Request
+                path: /api/warehouses/invalid/batches
       parameters:
       - name: warehouseId
         in: path
@@ -184,6 +202,7 @@ paths:
           type: integer
           format: int64
         example: 1
+      operationId: getWarehouseBatches
   /api/warehouses/{warehouseId}/locations:
     get:
       tags:
@@ -209,6 +228,17 @@ paths:
                 distanceToPickingM: 8
                 distanceToShippingM: 20
                 active: true
+        '400':
+          description: Invalid numeric path parameter; rejected by Spring MVC.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 400
+                error: Bad Request
+                path: /api/warehouses/invalid/locations
       parameters:
       - name: warehouseId
         in: path
@@ -218,6 +248,7 @@ paths:
           type: integer
           format: int64
         example: 1
+      operationId: getWarehouseLocations
   /api/classifications/run:
     post:
       tags:
@@ -261,8 +292,8 @@ paths:
                   cv: null
                   note: no data
         '400':
-          description: Missing/invalid date range, too long a window, or warehouse is not LIVE; response body
-            is determined by Spring Boot error configuration.
+          description: Missing/invalid date range, too long a window, or warehouse is not LIVE; response body is
+            determined by Spring Boot error configuration.
           content:
             application/json:
               schema:
@@ -293,8 +324,9 @@ paths:
               warehouseId: 1
               windowStart: '2026-10-01'
               windowEnd: '2026-10-31'
-      description: Date window is inclusive; maximum allowed difference between dates is 3650 days. Request
-        fields are checked in the service rather than Jakarta Bean Validation.
+      description: Date window is inclusive; maximum allowed difference between dates is 3650 days. Request fields
+        are checked in the service rather than Jakarta Bean Validation.
+      operationId: runClassification
   /api/constraints/batches/{batchId}/locations/{locationId}:
     get:
       tags:
@@ -325,6 +357,17 @@ paths:
                 status: 404
                 error: Not Found
                 path: /api/constraints/batches/5/locations/1
+        '400':
+          description: Invalid numeric path parameter; rejected by Spring MVC.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+              example:
+                timestamp: '2026-11-22T15:44:14.268+00:00'
+                status: 400
+                error: Bad Request
+                path: /api/constraints/batches/invalid/locations/1
       parameters:
       - name: batchId
         in: path
@@ -345,6 +388,7 @@ paths:
       description: 'A non-feasible location is reported with HTTP 200 and feasible=false, not as an HTTP error.
         Possible rejection codes: WAREHOUSE_MISMATCH, BATCH_NOT_AWAITING_PUTAWAY, LOCATION_INACTIVE, NOT_STORAGE_LOCATION,
         INSUFFICIENT_VOLUME, INSUFFICIENT_WEIGHT_CAPACITY, DIMENSIONS_EXCEEDED, INCOMPATIBLE_PRODUCTS.'
+      operationId: evaluateConstraints
   /api/recommendations/batches/{batchId}:
     get:
       tags:
@@ -369,29 +413,25 @@ paths:
                       locationId: 9
                       locationCode: ST-09
                       distanceMeters: 35
-                      explanation: Passes hard constraints; nearest feasible location by distance to picking
-                        (m)
+                      explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
                       scoreBreakdown: null
                     - rank: 2
                       locationId: 10
                       locationCode: ST-10
                       distanceMeters: 40
-                      explanation: Passes hard constraints; nearest feasible location by distance to picking
-                        (m)
+                      explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
                       scoreBreakdown: null
                     - rank: 3
                       locationId: 11
                       locationCode: ST-11
                       distanceMeters: 45
-                      explanation: Passes hard constraints; nearest feasible location by distance to picking
-                        (m)
+                      explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
                       scoreBreakdown: null
                     - rank: 4
                       locationId: 12
                       locationCode: ST-12
                       distanceMeters: 55
-                      explanation: Passes hard constraints; nearest feasible location by distance to picking
-                        (m)
+                      explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
                       scoreBreakdown: null
                 weightedScore:
                   summary: Illustrative weighted ranking (scores depend on current data and evaluation date)
@@ -419,8 +459,8 @@ paths:
                         classificationMissing: true
                         expiryUnknown: true
         '400':
-          description: Invalid topN (outside 1–100), unknown strategy, or expired batch with weighted_score.
-            The error body depends on Spring Boot configuration.
+          description: Invalid topN (outside 1–100), unknown strategy, or expired batch with weighted_score. The
+            error body depends on Spring Boot configuration.
           content:
             application/json:
               schema:
@@ -471,12 +511,13 @@ paths:
           - weighted_score
           default: nearest_feasible
         example: weighted_score
-      description: Evaluates hard constraints before ranking locations. The default strategy nearest_feasible
-        orders feasible locations by distance to the product outbound flow (PICKING or SHIPPING). The weighted_score
-        strategy uses distance (35%), ABC/XYZ classification (25%), expiry accessibility (25%), and volume
-        fit (15%). For weighted_score, scoreBreakdown explains the normalized components and weighted contributions.
-        If no locations are feasible, returns 200 with an empty recommendations list. feasibleCount counts
-        hard-constraint-feasible locations; weighted_score may omit locations with missing scoring inputs.
+      description: Evaluates hard constraints before ranking locations. The default strategy nearest_feasible orders
+        feasible locations by distance to the product outbound flow (PICKING or SHIPPING). The weighted_score strategy
+        uses distance (35%), ABC/XYZ classification (25%), expiry accessibility (25%), and volume fit (15%). For
+        weighted_score, scoreBreakdown explains the normalized components and weighted contributions. If no locations
+        are feasible, returns 200 with an empty recommendations list. feasibleCount counts hard-constraint-feasible
+        locations; weighted_score may omit locations with missing scoring inputs.
+      operationId: getRecommendations
 components:
   schemas:
     CreateProductRequest:
@@ -506,8 +547,9 @@ components:
           example: 100
         unitWeightKg:
           type: number
-          exclusiveMinimum: 0
+          exclusiveMinimum: true
           example: 1.25
+          minimum: 0
         compatibilityGroupId:
           type: integer
           format: int64
@@ -687,6 +729,7 @@ components:
           - X
           - Y
           - Z
+          - null
           nullable: true
           example: X
         movementCount:
@@ -771,10 +814,7 @@ components:
           example: Passes hard constraints; nearest feasible location by distance to picking (m)
           description: Human-readable ranking explanation; varies by strategy.
         scoreBreakdown:
-          nullable: true
-          allOf:
-          - $ref: '#/components/schemas/ScoreBreakdown'
-          description: Detailed weighted-score components; null for nearest_feasible.
+          $ref: '#/components/schemas/ScoreBreakdown'
     RecommendationResponse:
       type: object
       properties:
@@ -795,28 +835,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RecommendationItemResponse'
-    ProblemDetail:
-      type: object
-      properties:
-        type:
-          type: string
-          example: about:blank
-        title:
-          type: string
-          example: Bad Request
-        status:
-          type: integer
-          example: 400
-        detail:
-          type: string
-          example: Invalid warehouse or date range
-        instance:
-          type: string
-          example: /api/classifications/run
     SpringBootErrorResponse:
       type: object
-      description: Default Spring Boot error response observed in the dev environment. Additional fields may
-        depend on configuration.
+      description: Default Spring Boot JSON error response observed in the development environment. ApiExceptionHandler
+        sets the HTTP status and servlet error reason, not a custom JSON body. Additional fields depend on configuration.
       properties:
         timestamp:
           type: string
@@ -838,8 +860,8 @@ components:
       - path
     ScoreBreakdown:
       type: object
-      description: Normalized score components (0–1), weighted contributions, total and missing-data flags.
-        The score is calculated for weighted_score only.
+      description: Normalized score components (0–1), weighted contributions, total and missing-data flags. The
+        score is calculated for weighted_score only. Null for nearest_feasible.
       properties:
         distance:
           type: number
@@ -890,3 +912,5 @@ components:
           type: boolean
         expiryUnknown:
           type: boolean
+      nullable: true
+security: []

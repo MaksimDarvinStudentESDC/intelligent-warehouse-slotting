@@ -2,21 +2,23 @@
 
 ## Scope
 
-This guide documents **observed responses** from manual testing of the Intelligent Warehouse Slotting Optimization System backend on 22 November 2026. It does not imply that the application currently has a custom global exception handler or a standardized field-level error format.
+This guide describes the current backend implementation and the JSON error format observed during manual testing on 22 November 2026. The implementation was reviewed against `ApiExceptionHandler.java`, `UseCaseException.java`, the service classes and `ApiExceptionHandlerTest.java`.
 
-## HTTP status codes
+## Centralized business exception handling
 
-| Status | Meaning | Example operation |
-|---|---|---|
-| `200 OK` | Successful retrieval, feasibility check, or recommendations | `GET /api/recommendations/batches/5?topN=5` |
-| `201 Created` | Product, batch, or classification run created | `POST /api/products`, `POST /api/batches`, `POST /api/classifications/run` |
-| `400 Bad Request` | Request rejected, e.g. invalid validation parameter | `POST /api/products` with `lengthMm=-100`; `POST /api/batches` with `quantity=0`; `GET /api/recommendations/batches/5?topN=0` |
-| `404 Not Found` | Requested resource does not exist | `GET /api/constraints/batches/999999/locations/1` |
-| `409 Conflict` | Potential conflict documented in the API contract (such as a duplicate SKU/batch code); **not manually verified** | `POST /api/products`, `POST /api/batches` |
+`ApiExceptionHandler` is a `@RestControllerAdvice` that handles `UseCaseException` and calls `HttpServletResponse.sendError(status, message)`.
 
-## Observed error body
+| Exception kind | HTTP status |
+|---|---|
+| `INVALID_INPUT` | 400 Bad Request |
+| `NOT_FOUND` | 404 Not Found |
+| `CONFLICT` | 409 Conflict |
 
-The development backend returned the default Spring Boot JSON error structure:
+Spring MVC also rejects malformed JSON, invalid parameter types and applicable Bean Validation failures with HTTP 400. These are not necessarily `UseCaseException` instances.
+
+## JSON error response
+
+For requests accepting JSON, the default Spring Boot error response observed in the development environment is:
 
 ```json
 {
@@ -27,46 +29,76 @@ The development backend returned the default Spring Boot JSON error structure:
 }
 ```
 
-Fields:
-
-| Field | Type | Description |
+| Field | Type | Meaning |
 |---|---|---|
-| `timestamp` | date-time string | Time when the error was generated; value changes for every request |
-| `status` | integer | HTTP response status |
+| `timestamp` | date-time string | Time of error |
+| `status` | integer | HTTP status code |
 | `error` | string | General HTTP error label |
-| `path` | string | Request path without query string in observed responses |
+| `path` | string | Request path |
 
-**Important:** This response does **not** identify the invalid field or provide a detailed business-error message. Do not rely on a `message`, `details`, `code`, or `fieldErrors` property unless the backend is explicitly enhanced to provide one. The response structure may vary with Spring Boot settings and deployment profiles.
+The handler sets the servlet error reason but does not serialize a custom JSON body. The current application configuration does not explicitly enable exception messages in error bodies. Clients must not assume that `message`, `details`, `code` or `fieldErrors` are present. Content negotiation and deployment settings may affect the response format. The API does not currently guarantee a Problem Details (RFC 9457) response.
 
-## Tested negative scenarios
+## Endpoint status codes
 
-| Test | Request | Expected | Observed | Result |
-|---|---|---|---|---|
-| N1 | `POST /api/products` with `lengthMm: -100` | 400 | 400 | PASS |
-| N2 | `POST /api/batches` with `quantity: 0` | 400 | 400 | PASS |
-| N3 | `GET /api/constraints/batches/999999/locations/1` | 404 | 404 | PASS |
-| N4 | `GET /api/recommendations/batches/5?topN=0` | 400 | 400 | PASS |
+| Endpoint | Success | Documented client errors |
+|---|---|---|
+| POST `/api/products` | 201 | 400, 404, 409 |
+| POST `/api/batches` | 201 | 400, 404, 409 |
+| GET `/api/warehouses/{warehouseId}/batches` | 200 | 400 (invalid parameter type) |
+| GET `/api/warehouses/{warehouseId}/locations` | 200 | 400 (invalid parameter type) |
+| GET `/api/constraints/batches/{batchId}/locations/{locationId}` | 200 | 400, 404 |
+| GET `/api/recommendations/batches/{batchId}` | 200 | 400, 404 |
+| POST `/api/classifications/run` | 201 | 400, 404 |
+
+Unexpected server failures may produce HTTP 500. No custom 500 response contract is defined. The current backend does not implement HTTP authentication or authorization; no application-specific 401/403 contract is claimed.
+
+## Business exception messages
+
+The following messages are taken from the service implementation. They describe server-side exception reasons, not guaranteed JSON fields.
+
+| Operation | Status | Exception message |
+|---|---|---|
+| Create product | 400 | Compatibility group not found in warehouse |
+| Create product | 404 | Warehouse not found |
+| Create product | 409 | SKU already exists in warehouse |
+| Register batch | 400 | Archived product cannot receive batches |
+| Register batch | 400 | Expiry date must be after receiving date |
+| Register batch | 404 | Product not found |
+| Register batch | 409 | Batch code already exists in warehouse |
+| Check constraints | 404 | Batch not found / Location not found |
+| Recommendations | 400 | topN must be between 1 and 100 |
+| Recommendations | 400 | Unsupported strategy: followed by the requested strategy |
+| Recommendations (`weighted_score`) | 400 | Expired batch cannot be ranked |
+| Recommendations | 404 | Batch not found |
+| Classification | 400 | Invalid warehouse or date range |
+| Classification | 400 | Window must not exceed 3651 days |
+| Classification | 400 | Persisted classification runs are supported only for LIVE warehouses |
+| Classification | 404 | Warehouse not found |
 
 ## Business rejection is not an HTTP error
 
-A feasible-location check returns **HTTP 200** even when a location cannot accommodate a batch. For example, batch `5` against location `1` returns `feasible: false` with rejection codes including `INSUFFICIENT_VOLUME` and `INSUFFICIENT_WEIGHT_CAPACITY`. This is an expected business result, not a failed HTTP request.
+A constraint check may return HTTP 200 with `feasible: false` and rejection reasons such as `INSUFFICIENT_VOLUME` or `INSUFFICIENT_WEIGHT_CAPACITY`. This is a successful evaluation, not a failed request. A feasible result has `feasible: true` and an empty `rejectionReasons` array.
 
-For batch `5` against location `9`, the API returns `feasible: true` and `rejectionReasons: []`.
+## Verification evidence
 
-## Swagger UI: fixing “Undocumented”
+| Scenario | Expected status | Evidence |
+|---|---|---|
+| Negative product length | 400 | Manual test N1 passed |
+| Zero batch quantity | 400 | Manual test N2 passed |
+| Missing batch in constraint check | 404 | Manual test N3 passed |
+| Recommendation topN=0 | 400 | Manual test N4 passed |
+| INVALID_INPUT / NOT_FOUND / CONFLICT mapping | 400 / 404 / 409 | Parameterized handler test in repository |
 
-The checked-in `docs/api/openapi.yaml` defines the documented status codes. To display that file rather than an auto-generated definition, copy it to `backend/src/main/resources/static/openapi.yaml` and configure:
+The handler test checks the status and servlet error reason using standalone MockMvc. It does not verify the serialized JSON after a real servlet error dispatch. Duplicate SKU and batch-code responses are implemented, but a successful live database integration test for these scenarios is not established by this review.
 
-```properties
-springdoc.swagger-ui.path=/swagger-ui.html
-springdoc.swagger-ui.url=/openapi.yaml
-springdoc.swagger-ui.disable-swagger-default-url=true
-```
+## Client handling
 
-Restart the backend, then refresh Swagger UI. Check that the page title is **Intelligent Warehouse Slotting Optimization System API** and that the specification version is **OpenAPI 3.0.3**. The displayed `201`, `400`, and `404` response descriptions should now match the YAML. If the UI still shows **OpenAPI definition** and `/v3/api-docs`, it is likely using the auto-generated document. The generated `/v3/api-docs` endpoint may remain enabled; it is a different source of documentation.
+Use the HTTP status as the primary error signal. For 400, correct input; for 404, verify resource identifiers; for 409, resolve the duplicate before retrying. Display a general fallback message if no detailed message is returned. Do not treat a successful constraint rejection as an HTTP failure.
 
-The `409` descriptions are included as potential contract responses but have not been verified by manual tests. Test these before treating them as confirmed behavior.
+## Swagger UI and contract maintenance
 
-## Suggested future enhancement (not implemented)
+The canonical specification is [openapi.yaml](./openapi.yaml). Keep the served copy at `backend/src/main/resources/static/openapi.yaml` identical. Swagger UI is available at `http://localhost:8080/swagger-ui.html` when the backend is running.
 
-A centralized `@RestControllerAdvice` could return machine-readable error codes and field-level validation details. This would require changes to backend code, tests, OpenAPI schemas, and example responses. The current documentation deliberately describes the existing behavior instead.
+See [Getting Started](./README.md), [Integration Tutorial](./integration-tutorial.md) and [API Validation Results](./validation-results.md).
+
+A future enhancement could introduce a stable machine-readable error code and field-level validation details. Such a change requires coordinated backend, test and OpenAPI updates.

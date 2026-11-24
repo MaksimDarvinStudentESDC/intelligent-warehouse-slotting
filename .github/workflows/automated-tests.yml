@@ -78,3 +78,18 @@ jobs:
             frontend/test-results/
             frontend/playwright-report/
           if-no-files-found: ignore
+
+  openapi-validation:
+    name: OpenAPI Validation (Redocly)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate API documentation
+        run: npx --yes @redocly/cli lint docs/api/openapi.yaml
+      - name: Validate Swagger UI specification
+        run: npx --yes @redocly/cli lint backend/src/main/resources/static/openapi.yaml
+      - name: Verify specifications are identical
+        run: diff -u docs/api/openapi.yaml backend/src/main/resources/static/openapi.yaml
