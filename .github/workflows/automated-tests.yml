@@ -22,14 +22,14 @@ jobs:
           cache: maven
           cache-dependency-path: backend/pom.xml
 
-      - name: Run backend tests
+      - name: Run backend tests and verify coverage
         working-directory: backend
         env:
           TZ: UTC
           JAVA_TOOL_OPTIONS: -Duser.timezone=UTC
           JWT_SECRET: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
           JWT_EXPIRATION_SECONDS: '1800'
-        run: mvn -B -ntp test
+        run: mvn -B -ntp clean verify
 
       - name: Upload backend test and coverage reports
         if: always()
