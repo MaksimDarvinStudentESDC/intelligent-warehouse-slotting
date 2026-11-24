@@ -5,6 +5,11 @@ import com.warehouse.slotting.dto.RecommendationResponse;
 import com.warehouse.slotting.exception.UseCaseException;
 import com.warehouse.slotting.service.RecommendationService;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import com.warehouse.slotting.config.SecurityConfig;
+import com.warehouse.slotting.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -21,7 +26,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(controllers = RecommendationController.class)
+@Import(SecurityConfig.class)
+@WithMockUser(roles = "OPERATOR")
 class RecommendationControllerWebIntegrationTest {
+    @MockitoBean private UserRepository userRepository;
+    @MockitoBean private JwtDecoder jwtDecoder;
 
     @Autowired
     private MockMvc mockMvc;

@@ -1,3 +1,4 @@
+import {signIn} from './auth-helper';
 import { expect, test } from '@playwright/test';
 
 test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
@@ -16,7 +17,7 @@ test('mobile navigation opens and navigates to Locations', async ({ page }) => {
     });
   });
 
-  await page.goto('/');
+  await signIn(page);
   const menuButton = page.getByRole('button', { name: 'Open navigation' });
   await expect(menuButton).toBeVisible();
   await menuButton.click();

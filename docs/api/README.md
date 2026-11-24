@@ -80,7 +80,22 @@ DB_APP_USERNAME=warehouse_app
 DB_APP_PASSWORD=change_me_app
 DB_MIGRATOR_USERNAME=warehouse_migrator
 DB_MIGRATOR_PASSWORD=change_me_migrator
+JWT_SECRET=
+JWT_EXPIRATION_SECONDS=1800
 ```
+
+`JWT_SECRET` is required: use a Base64-encoded random key of at least 32 decoded bytes. `JWT_EXPIRATION_SECONDS` defaults to 1800 and must be positive. Generate a local key in PowerShell:
+
+```powershell
+$bytes = New-Object byte[] 32
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($bytes)
+$rng.Dispose()
+$env:JWT_SECRET = [Convert]::ToBase64String($bytes)
+$env:JWT_EXPIRATION_SECONDS = "1800"
+```
+
+For Bash, generate a key with `openssl rand -base64 32` and store it privately in `.env`. For IntelliJ, configure the same variables in the backend Run Configuration. Keep the key stable across restarts if existing tokens must remain valid. Never commit or publish the key.
 
 Replace example passwords with local development credentials. Do not commit `.env` to version control.
 
@@ -134,7 +149,7 @@ Use passwords matching the local environment. Do not recreate existing roles. Ex
 
 ## 7. Start the Backend
 
-Windows PowerShell:
+Windows PowerShell (in the same terminal where JWT variables were set in Section 4):
 
 ```powershell
 $env:DB_URL = "jdbc:postgresql://localhost:5433/warehouse_slotting"
@@ -186,17 +201,23 @@ Swagger UI allows developers to inspect endpoints, request parameters and respon
 
 ## 10. Execute Your First API Request
 
-Retrieve active storage locations using `GET /api/warehouses/1/locations`. Replace `1` with the actual warehouse ID if necessary.
+An existing active account with a BCrypt password hash is required. The current API has no registration or account-management endpoint. Demo warehouse initialization does not provision accounts. Ask the local database administrator to provision a development account with an appropriate role; never store plaintext passwords in the database.
 
-```bash
-curl -i http://localhost:8080/api/warehouses/1/locations
-```
+In Swagger UI, execute `POST /api/auth/login` with the account login and password. Copy the returned `accessToken`, click **Authorize**, and paste the token without the `Bearer` prefix. Use `GET /api/auth/me` to verify the account. Swagger logout removes its stored authorization, not the server-side validity of the token.
 
-Windows PowerShell:
+PowerShell example (use an operator, planner or manager account):
 
 ```powershell
-Invoke-RestMethod -Method Get -Uri "http://localhost:8080/api/warehouses/1/locations"
+$base = "http://localhost:8080"
+$credential = Get-Credential -Message "Warehouse development account"
+$body = @{login=$credential.UserName; password=$credential.GetNetworkCredential().Password} | ConvertTo-Json
+$session = Invoke-RestMethod -Method Post -Uri "$base/api/auth/login" -ContentType "application/json" -Body $body
+$headers = @{Authorization="Bearer $($session.accessToken)"}
+Invoke-RestMethod -Uri "$base/api/auth/me" -Headers $headers
+Invoke-RestMethod -Uri "$base/api/warehouses/1/locations" -Headers $headers
 ```
+
+Replace warehouse ID `1` if necessary. Login returns `accessToken`, `tokenType`, `expiresIn` (seconds), and `user` (id, login, fullName, role). Do not publish the response token. Reauthenticate after expiry; there is no refresh endpoint.
 
 Expected status: `200 OK`.
 
@@ -225,6 +246,8 @@ Actual identifiers and values depend on database contents. A successful response
 
 | Method | Endpoint | Description |
 |---|---|---|
+| POST | `/api/auth/login` | Authenticate an existing account |
+| GET | `/api/auth/me` | Retrieve the current authenticated user |
 | POST | `/api/products` | Create a product |
 | POST | `/api/batches` | Register an incoming batch |
 | GET | `/api/warehouses/{warehouseId}/batches` | Retrieve warehouse batches |
@@ -232,6 +255,8 @@ Actual identifiers and values depend on database contents. A successful response
 | GET | `/api/constraints/batches/{batchId}/locations/{locationId}` | Evaluate storage constraints |
 | GET | `/api/recommendations/batches/{batchId}` | Generate ranked recommendations |
 | POST | `/api/classifications/run` | Execute ABC/XYZ classification |
+
+Login is public. All other listed operations require a Bearer token. Product creation and classification require planner; batch creation, constraint checks and recommendations require operator; warehouse lists allow operator, planner and manager. All five roles can access `/api/auth/me`. Unspecified endpoints are denied (except explicitly public documentation resources).
 
 For complete request and response models, consult the OpenAPI specification.
 
@@ -245,7 +270,7 @@ npm ci
 npm run dev
 ```
 
-Open the URL displayed by Vite, normally `http://localhost:5173`. Keep the backend running to use real API data.
+Open the URL displayed by Vite, normally `http://localhost:5173`. Keep the backend running to use real API data. Sign in with an active account. The frontend stores the token in memory; refreshing the page requires login again.
 
 ## 13. Troubleshooting
 
@@ -256,6 +281,9 @@ Open the URL displayed by Vite, normally `http://localhost:5173`. Keep the backe
 | Role warehouse_owner does not exist | Complete role initialization before starting Flyway. |
 | Permission denied for table | Verify runtime database permissions. |
 | Unsupported Java version | Verify JAVA_HOME and the Java version used by Maven. |
+| Backend fails during JWT initialization | Check that JWT_SECRET is valid Base64 with at least 32 decoded bytes and expiration is positive. |
+| HTTP 401 | Check credentials, account activity or token expiry; sign in again. |
+| HTTP 403 | Use an account with the required role. |
 | Swagger UI unavailable | Verify the backend is running on port 8080. |
 | Warehouse not found | Initialize demo data and verify the warehouse ID. |
 | Empty location list | Verify the warehouse contains active locations. |
@@ -271,3 +299,5 @@ Open the URL displayed by Vite, normally `http://localhost:5173`. Keep the backe
 ## 15. Security and Project Scope
 
 Database credentials must be provided through environment variables and must not be committed to the repository. This setup is intended for local development and educational evaluation. Database roles provide separation of database privileges; they do not replace HTTP authentication or application-level authorization.
+
+Application authentication uses BCrypt and HS256 JWTs. Authorization checks the current active database account and role. Use HTTPS outside local development. Client logout does not revoke an already issued token; no refresh or revocation endpoint is implemented. Disable temporary Spring Security DEBUG logging before non-local deployment.

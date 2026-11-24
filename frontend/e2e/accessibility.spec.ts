@@ -1,3 +1,4 @@
+import {signIn} from './auth-helper';
 
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -37,7 +38,7 @@ for (const pageInfo of pages) {
             );
         }
 
-        await page.goto(pageInfo.path);
+        await signIn(page, pageInfo.path);
 
         await expect(page.locator('main')).toBeVisible();
 
@@ -69,7 +70,7 @@ for (const pageInfo of pages) {
 test('Receive Batch validation errors meet WCAG 2.1 AA checks', async ({
                                                                            page,
                                                                        }) => {
-    await page.goto('/receive');
+    await signIn(page, '/receive');
 
     await expect(page.locator('main')).toBeVisible();
 

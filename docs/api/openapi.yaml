@@ -4,11 +4,15 @@ info:
   version: 0.1.0
   description: Documented REST API for the current implementation. Recommendations support nearest_feasible and
     weighted_score. ApiExceptionHandler maps business exceptions to HTTP 400, 404 or 409 using sendError. Spring
-    Boot renders the error body; detailed exception messages are not guaranteed in JSON.
+    Boot renders the error body; detailed exception messages are not guaranteed in JSON. Protected operations require
+    a JWT Bearer token. Authorization uses the current active account and role in the database. Unspecified endpoints
+    are denied. Use HTTPS outside local development.
 servers:
 - url: http://localhost:8080
   description: Local development
 tags:
+- name: Authentication
+  description: Login and current authenticated user.
 - name: Catalog
   description: Product catalog and incoming batch registration.
 - name: Warehouse
@@ -20,6 +24,65 @@ tags:
 - name: Recommendations
   description: Ranked storage location recommendations.
 paths:
+  /api/auth/login:
+    post:
+      tags:
+      - Authentication
+      summary: Authenticate an existing user
+      operationId: login
+      security: []
+      description: Public endpoint. Returns a signed access token for an active account. Do not send an existing
+        Authorization header when logging in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              login: example_operator
+              password: example-password
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                accessToken: <signed-jwt>
+                tokenType: Bearer
+                expiresIn: 1800
+                user:
+                  id: 2
+                  login: example_operator
+                  fullName: Example Operator
+                  role: operator
+        '400':
+          description: Invalid request or password exceeds BCrypt byte limit.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/auth/me:
+    get:
+      tags:
+      - Authentication
+      summary: Get current authenticated user
+      operationId: getCurrentUser
+      description: Available to all five authenticated roles. Returns current account details without password hash.
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                id: 2
+                login: example_operator
+                fullName: Example Operator
+                role: operator
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /api/products:
     post:
       tags:
@@ -72,6 +135,10 @@ paths:
                 status: 409
                 error: Conflict
                 path: /api/products
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
       requestBody:
         required: true
         content:
@@ -90,6 +157,7 @@ paths:
               shelfLifeDays: 90
               outboundFlow: PICKING
       operationId: createProduct
+      description: 'Allowed roles: planner.'
   /api/batches:
     post:
       tags:
@@ -146,6 +214,10 @@ paths:
                 status: 409
                 error: Conflict
                 path: /api/batches
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
       requestBody:
         required: true
         content:
@@ -159,6 +231,7 @@ paths:
               receivingDate: '2026-11-22'
               expiryDate: '2027-02-20'
       operationId: createBatch
+      description: 'Allowed roles: operator.'
   /api/warehouses/{warehouseId}/batches:
     get:
       tags:
@@ -193,6 +266,10 @@ paths:
                 status: 400
                 error: Bad Request
                 path: /api/warehouses/invalid/batches
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
       parameters:
       - name: warehouseId
         in: path
@@ -203,6 +280,7 @@ paths:
           format: int64
         example: 1
       operationId: getWarehouseBatches
+      description: 'Allowed roles: operator, manager, planner.'
   /api/warehouses/{warehouseId}/locations:
     get:
       tags:
@@ -239,6 +317,10 @@ paths:
                 status: 400
                 error: Bad Request
                 path: /api/warehouses/invalid/locations
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
       parameters:
       - name: warehouseId
         in: path
@@ -249,6 +331,7 @@ paths:
           format: int64
         example: 1
       operationId: getWarehouseLocations
+      description: 'Allowed roles: operator, manager, planner.'
   /api/classifications/run:
     post:
       tags:
@@ -314,6 +397,10 @@ paths:
                 status: 404
                 error: Not Found
                 path: /api/classifications/run
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
       requestBody:
         required: true
         content:
@@ -324,8 +411,11 @@ paths:
               warehouseId: 1
               windowStart: '2026-10-01'
               windowEnd: '2026-10-31'
-      description: Date window is inclusive; maximum allowed difference between dates is 3650 days. Request fields
+      description: 'Date window is inclusive; maximum allowed difference between dates is 3650 days. Request fields
         are checked in the service rather than Jakarta Bean Validation.
+
+
+        Allowed roles: planner.'
       operationId: runClassification
   /api/constraints/batches/{batchId}/locations/{locationId}:
     get:
@@ -368,6 +458,10 @@ paths:
                 status: 400
                 error: Bad Request
                 path: /api/constraints/batches/invalid/locations/1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
       parameters:
       - name: batchId
         in: path
@@ -387,7 +481,10 @@ paths:
         example: 1
       description: 'A non-feasible location is reported with HTTP 200 and feasible=false, not as an HTTP error.
         Possible rejection codes: WAREHOUSE_MISMATCH, BATCH_NOT_AWAITING_PUTAWAY, LOCATION_INACTIVE, NOT_STORAGE_LOCATION,
-        INSUFFICIENT_VOLUME, INSUFFICIENT_WEIGHT_CAPACITY, DIMENSIONS_EXCEEDED, INCOMPATIBLE_PRODUCTS.'
+        INSUFFICIENT_VOLUME, INSUFFICIENT_WEIGHT_CAPACITY, DIMENSIONS_EXCEEDED, INCOMPATIBLE_PRODUCTS.
+
+
+        Allowed roles: operator.'
       operationId: evaluateConstraints
   /api/recommendations/batches/{batchId}:
     get:
@@ -481,6 +578,10 @@ paths:
                 status: 404
                 error: Not Found
                 path: /api/recommendations/batches/5
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
       parameters:
       - name: batchId
         in: path
@@ -511,12 +612,15 @@ paths:
           - weighted_score
           default: nearest_feasible
         example: weighted_score
-      description: Evaluates hard constraints before ranking locations. The default strategy nearest_feasible orders
+      description: 'Evaluates hard constraints before ranking locations. The default strategy nearest_feasible orders
         feasible locations by distance to the product outbound flow (PICKING or SHIPPING). The weighted_score strategy
         uses distance (35%), ABC/XYZ classification (25%), expiry accessibility (25%), and volume fit (15%). For
         weighted_score, scoreBreakdown explains the normalized components and weighted contributions. If no locations
         are feasible, returns 200 with an empty recommendations list. feasibleCount counts hard-constraint-feasible
         locations; weighted_score may omit locations with missing scoring inputs.
+
+
+        Allowed roles: operator.'
       operationId: getRecommendations
 components:
   schemas:
@@ -913,4 +1017,81 @@ components:
         expiryUnknown:
           type: boolean
       nullable: true
-security: []
+    LoginRequest:
+      type: object
+      required:
+      - login
+      - password
+      properties:
+        login:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Non-blank account login.
+        password:
+          type: string
+          format: password
+          writeOnly: true
+          minLength: 1
+          maxLength: 72
+          description: Non-blank password, at most 72 UTF-8 bytes.
+    UserResponse:
+      type: object
+      required:
+      - id
+      - login
+      - fullName
+      - role
+      properties:
+        id:
+          type: integer
+          format: int64
+        login:
+          type: string
+        fullName:
+          type: string
+        role:
+          type: string
+          enum:
+          - operator
+          - manager
+          - planner
+          - business_manager
+          - admin
+    LoginResponse:
+      type: object
+      required:
+      - accessToken
+      - tokenType
+      - expiresIn
+      - user
+      properties:
+        accessToken:
+          type: string
+          description: Signed JWT.
+        tokenType:
+          type: string
+          enum:
+          - Bearer
+        expiresIn:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Token lifetime in seconds; default 1800.
+        user:
+          $ref: '#/components/schemas/UserResponse'
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token returned by POST /api/auth/login. Paste the token without the Bearer prefix into
+        Swagger Authorize.
+  responses:
+    Unauthorized:
+      description: Authentication required, invalid or expired token, invalid credentials, or missing/inactive account.
+        Response body is not guaranteed.
+    Forbidden:
+      description: Authenticated account lacks the required role. Response body is not guaranteed.
+security:
+- bearerAuth: []

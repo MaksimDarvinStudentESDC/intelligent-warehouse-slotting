@@ -42,6 +42,8 @@ The handler sets the servlet error reason but does not serialize a custom JSON b
 
 | Endpoint | Success | Documented client errors |
 |---|---|---|
+| POST `/api/auth/login` | 200 | 400, 401 |
+| GET `/api/auth/me` | 200 | 401 |
 | POST `/api/products` | 201 | 400, 404, 409 |
 | POST `/api/batches` | 201 | 400, 404, 409 |
 | GET `/api/warehouses/{warehouseId}/batches` | 200 | 400 (invalid parameter type) |
@@ -50,7 +52,7 @@ The handler sets the servlet error reason but does not serialize a custom JSON b
 | GET `/api/recommendations/batches/{batchId}` | 200 | 400, 404 |
 | POST `/api/classifications/run` | 201 | 400, 404 |
 
-Unexpected server failures may produce HTTP 500. No custom 500 response contract is defined. The current backend does not implement HTTP authentication or authorization; no application-specific 401/403 contract is claimed.
+Unexpected server failures may produce HTTP 500. No custom 500 response contract is defined. Protected endpoints require a valid Bearer JWT. Missing or invalid tokens and inactive or missing accounts produce 401; authenticated accounts without the required role receive 403. Login returns 401 for invalid credentials and 400 for invalid input. Security errors do not guarantee the JSON structure described above. The public login endpoint does not require a token.
 
 ## Business exception messages
 
@@ -93,7 +95,7 @@ The handler test checks the status and servlet error reason using standalone Moc
 
 ## Client handling
 
-Use the HTTP status as the primary error signal. For 400, correct input; for 404, verify resource identifiers; for 409, resolve the duplicate before retrying. Display a general fallback message if no detailed message is returned. Do not treat a successful constraint rejection as an HTTP failure.
+Use the HTTP status as the primary error signal. For 401, reauthenticate; for 403, check the required role rather than retrying with the same credentials. For 400, correct input; for 404, verify resource identifiers; for 409, resolve the duplicate before retrying. Display a general fallback message if no detailed message is returned. Do not treat a successful constraint rejection as an HTTP failure.
 
 ## Swagger UI and contract maintenance
 

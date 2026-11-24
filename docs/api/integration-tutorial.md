@@ -18,6 +18,24 @@ This tutorial uses the currently implemented `nearest_feasible` recommendation s
 3. Ensure warehouse ID `1` exists and has active storage locations. The demonstrated test database had warehouse `1` (`DEMO - Main Warehouse`) and 12 active locations, `ST-01` through `ST-12`. Other databases may have different IDs or data.
 4. Use a **new SKU and batch code** for repeated runs. Do not reuse an existing identifier and assume that creation will succeed.
 
+Authentication is now required. Obtain separate active planner and operator accounts. The historical responses below predate authentication; the updated authenticated tutorial has not been rerun end to end.
+
+In Bash (requires `jq`), obtain tokens without embedding passwords in commands:
+
+```bash
+login_token() {
+  local login password
+  read -r -p 'Login: ' login
+  read -r -s -p 'Password: ' password
+  printf '\n' >&2
+  jq -n --arg login "$login" --arg password "$password" '{login:$login,password:$password}' |
+    curl -fsS -H 'Content-Type: application/json' -d @- http://localhost:8080/api/auth/login |
+    jq -er '.accessToken'
+}
+```
+
+Alternatively, use Swagger to obtain the tokens and set `PLANNER_TOKEN` and `OPERATOR_TOKEN` privately in the shell. If using the function, direct prompts to the terminal by running `PLANNER_TOKEN=$(login_token)` and `OPERATOR_TOKEN=$(login_token)` with the respective accounts. Reauthenticate when tokens expire. Do not publish tokens.
+
 All examples below use Bash-style `curl` commands. Windows PowerShell users can execute them in Git Bash or adapt the commands to `Invoke-RestMethod`.
 
 ## Step 1 — Create a product
@@ -26,6 +44,7 @@ All examples below use Bash-style `curl` commands. Windows PowerShell users can 
 
 ```bash
 curl -i -X POST 'http://localhost:8080/api/products' \
+  -H "Authorization: Bearer $PLANNER_TOKEN" \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json' \
   -d '{
@@ -64,6 +83,7 @@ Replace `5` in `productId` with the **actual product ID** from Step 1.
 
 ```bash
 curl -i -X POST 'http://localhost:8080/api/batches' \
+  -H "Authorization: Bearer $OPERATOR_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
     "productId": 5,
@@ -96,7 +116,7 @@ The batch occupies `50 × 9 = 450 dm³` and weighs `50 × 2.5 = 125 kg`. **Recor
 ## Step 3 — Verify the batch belongs to the warehouse
 
 ```bash
-curl -i 'http://localhost:8080/api/warehouses/1/batches'
+curl -i -H "Authorization: Bearer $OPERATOR_TOKEN" 'http://localhost:8080/api/warehouses/1/batches'
 ```
 
 **Expected HTTP status:** `200 OK`. The response is an array. Locate the entry with the batch ID and batch code from Step 2. During validation, the array included:
@@ -119,7 +139,7 @@ This is **one object within the returned array**, not the entire response. Its b
 ## Step 4 — Discover active storage locations
 
 ```bash
-curl -i 'http://localhost:8080/api/warehouses/1/locations'
+curl -i -H "Authorization: Bearer $OPERATOR_TOKEN" 'http://localhost:8080/api/warehouses/1/locations'
 ```
 
 **Expected HTTP status:** `200 OK`, with an array of active locations. Each entry includes `id`, `code`, `zoneId`, `capacityDm3`, `occupiedDm3`, `maxWeightKg`, distances to receiving/picking/shipping, and `active`.
@@ -142,7 +162,7 @@ Replace `5` with your actual batch ID and use location IDs from Step 4.
 **Example A: insufficient capacity**
 
 ```bash
-curl -i 'http://localhost:8080/api/constraints/batches/5/locations/1'
+curl -i -H "Authorization: Bearer $OPERATOR_TOKEN" 'http://localhost:8080/api/constraints/batches/5/locations/1'
 ```
 
 **Expected HTTP status:** `200 OK`. The validated dataset returned:
@@ -163,7 +183,7 @@ curl -i 'http://localhost:8080/api/constraints/batches/5/locations/1'
 **Example B: sufficient volume and weight**
 
 ```bash
-curl -i 'http://localhost:8080/api/constraints/batches/5/locations/9'
+curl -i -H "Authorization: Bearer $OPERATOR_TOKEN" 'http://localhost:8080/api/constraints/batches/5/locations/9'
 ```
 
 The validated dataset returned:
@@ -183,7 +203,7 @@ A `200 OK` response with `feasible: false` is **not** an HTTP error. It means th
 ## Step 6 — Request ranked slotting recommendations
 
 ```bash
-curl -i 'http://localhost:8080/api/recommendations/batches/5?topN=5'
+curl -i -H "Authorization: Bearer $OPERATOR_TOKEN" 'http://localhost:8080/api/recommendations/batches/5?topN=5'
 ```
 
 **Expected HTTP status:** `200 OK`.
@@ -236,6 +256,7 @@ Classification is a separate API operation; its results are **not demonstrated a
 
 ```bash
 curl -i -X POST 'http://localhost:8080/api/classifications/run' \
+  -H "Authorization: Bearer $PLANNER_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
     "warehouseId": 1,

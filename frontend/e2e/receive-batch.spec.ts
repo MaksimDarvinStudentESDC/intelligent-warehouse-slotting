@@ -1,3 +1,4 @@
+import {signIn} from './auth-helper';
 import { expect, test } from '@playwright/test';
 
 test('receives a batch and shows ranked location recommendations', async ({ page }) => {
@@ -39,7 +40,7 @@ test('receives a batch and shows ranked location recommendations', async ({ page
     });
   });
 
-  await page.goto('/receive');
+  await signIn(page, '/receive');
   await page.getByLabel('Product ID *').fill('1');
   await page.getByLabel('Batch code *').fill('E2E-BATCH-001');
   await page.getByLabel('Quantity *').fill('5');
