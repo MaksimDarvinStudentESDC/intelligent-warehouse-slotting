@@ -40,7 +40,7 @@ class RecommendationControllerWebIntegrationTest {
 
     @Test
     void defaultStrategyReturnsNearestFeasibleJson() throws Exception {
-        var item = new RecommendationItemResponse(1, 6L, "ST-06", new BigDecimal("21"), "Nearest feasible location");
+        var item = new RecommendationItemResponse(1, 6L, "ST-06", new BigDecimal("21"), "Nearest feasible location", null, 0L);
         when(recommendationService.recommend(1L, 5, "nearest_feasible"))
                 .thenReturn(new RecommendationResponse(1L, "nearest_feasible", 7, List.of(item)));
 

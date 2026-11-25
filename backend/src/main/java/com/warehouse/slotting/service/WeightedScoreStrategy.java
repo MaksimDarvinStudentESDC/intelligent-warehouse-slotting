@@ -74,7 +74,7 @@ public class WeightedScoreStrategy implements RankingStrategy {
                             + (s.expiryUnknown() ? "; expiry unknown (neutral)" : "");
                     return new RecommendationItemResponse(index + 1, item.location().getId(),
                             item.location().getCode(), distance(item.location(), flow),
-                            explanation, s);
+                            explanation, s, item.location().getVersion());
                 }).toList();
     }
 }

@@ -40,4 +40,19 @@ public class Batch {
  public LocalDate getExpiryDate(){return expiryDate;}
  public BatchStatus getStatus(){return status;}
  public Product getProduct(){return product;}
+
+ public Warehouse getWarehouse(){return warehouse;}
+ public Location getCurrentLocation(){return currentLocation;}
+ public OffsetDateTime getPlacedAt(){return placedAt;}
+ public void placeAt(Location location, OffsetDateTime timestamp){
+  java.util.Objects.requireNonNull(location);
+  java.util.Objects.requireNonNull(timestamp);
+  if(status != BatchStatus.AWAITING_PUTAWAY || currentLocation != null || placedAt != null)
+   throw new IllegalStateException("Batch is already placed");
+  if(!java.util.Objects.equals(warehouse.getId(), location.getWarehouse().getId()))
+   throw new IllegalArgumentException("Location belongs to another warehouse");
+  currentLocation=location;
+  placedAt=timestamp;
+  status=BatchStatus.PLACED;
+ }
 }

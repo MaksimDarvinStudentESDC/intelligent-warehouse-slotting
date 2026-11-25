@@ -97,4 +97,20 @@ public class Location {
     public BigDecimal getOccupiedVolumeDm3() { return occupiedVolumeDm3; }
     public BigDecimal getOccupiedWeightKg() { return occupiedWeightKg; }
     public Long getVersion() { return version; }
+
+    public void occupy(BigDecimal volume, BigDecimal weight) {
+        if (volume == null || weight == null || volume.signum() < 0 || weight.signum() < 0) {
+            throw new IllegalArgumentException("Volume and weight must be non-negative");
+        }
+        if (!Boolean.TRUE.equals(isActive)) {
+            throw new IllegalStateException("Location is inactive");
+        }
+        BigDecimal nextVolume = occupiedVolumeDm3.add(volume);
+        BigDecimal nextWeight = occupiedWeightKg.add(weight);
+        if (nextVolume.compareTo(volumeCapacityDm3) > 0 || nextWeight.compareTo(maxWeightKg) > 0) {
+            throw new IllegalStateException("Location capacity exceeded");
+        }
+        occupiedVolumeDm3 = nextVolume;
+        occupiedWeightKg = nextWeight;
+    }
 }

@@ -35,7 +35,7 @@ public class NearestFeasibleStrategy implements RankingStrategy {
                     return new RecommendationItemResponse(index + 1, location.getId(),
                             location.getCode(), distance(location, flow),
                             "Passes hard constraints; nearest feasible location by distance to "
-                                    + (flow == OutboundFlow.SHIPPING ? "shipping" : "picking") + " (m)");
+                                    + (flow == OutboundFlow.SHIPPING ? "shipping" : "picking") + " (m)", null, location.getVersion());
                 }).toList();
     }
 }
