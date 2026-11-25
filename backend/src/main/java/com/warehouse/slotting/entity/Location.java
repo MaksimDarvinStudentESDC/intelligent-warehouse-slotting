@@ -4,6 +4,7 @@ package com.warehouse.slotting.entity;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.hibernate.annotations.ColumnTransformer;
 
 import java.math.BigDecimal;
 
@@ -25,6 +26,7 @@ public class Location {
 
     @Convert(converter = ZoneTypeConverter.class)
     @JdbcTypeCode(SqlTypes.VARCHAR)
+    @ColumnTransformer(write = "?::zone_type")
     @Column(
             name = "zone_type",
             nullable = false,

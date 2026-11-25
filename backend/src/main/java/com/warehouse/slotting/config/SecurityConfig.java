@@ -173,6 +173,10 @@ public class SecurityConfig {
                                 "/api/classifications/run"
                         ).hasRole("PLANNER")
 
+                        // Placement and movement history
+                        .requestMatchers(HttpMethod.POST, "/api/placements/confirm").hasRole("OPERATOR")
+                        .requestMatchers(HttpMethod.GET, "/api/warehouses/*/movements").hasAnyRole("OPERATOR", "PLANNER", "MANAGER")
+
                         // Deny all unspecified endpoints
                         .anyRequest().denyAll()
                 )

@@ -20,7 +20,7 @@ class ApiExceptionHandlerTest {
                 .build()
                 .perform(get("/failure/{kind}", kind.name()))
                 .andExpect(status().is(expectedStatus))
-                .andExpect(status().reason("Use case failed"));
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.message").value("Use case failed"));
     }
 
     @RestController

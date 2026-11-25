@@ -3,10 +3,10 @@ info:
   title: Intelligent Warehouse Slotting Optimization System API
   version: 0.1.0
   description: Documented REST API for the current implementation. Recommendations support nearest_feasible and
-    weighted_score. ApiExceptionHandler maps business exceptions to HTTP 400, 404 or 409 using sendError. Spring
-    Boot renders the error body; detailed exception messages are not guaranteed in JSON. Protected operations require
-    a JWT Bearer token. Authorization uses the current active account and role in the database. Unspecified endpoints
-    are denied. Use HTTPS outside local development.
+    weighted_score. ApiExceptionHandler maps business exceptions to HTTP 400, 404 or 409 with a JSON message. Framework
+    errors may use the default Spring Boot body. Protected operations require a JWT Bearer token. Authorization
+    uses the current active account and role in the database. Unspecified endpoints are denied. Use HTTPS outside
+    local development.
 servers:
 - url: http://localhost:8080
   description: Local development
@@ -23,6 +23,10 @@ tags:
   description: Storage feasibility and hard constraints.
 - name: Recommendations
   description: Ranked storage location recommendations.
+- name: Placement
+  description: Confirm putaway.
+- name: Movements
+  description: Warehouse movement history.
 paths:
   /api/auth/login:
     post:
@@ -622,6 +626,111 @@ paths:
 
         Allowed roles: operator.'
       operationId: getRecommendations
+  /api/placements/confirm:
+    post:
+      tags:
+      - Placement
+      summary: Confirm placement
+      operationId: confirmPlacement
+      description: Operator only. Uses the authenticated account ID and checks the recommendation version.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlacementRequest'
+      responses:
+        '201':
+          description: Placement confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlacementResponse'
+        '400': &id001
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+        '404': &id002
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+        '409':
+          description: Placement conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpringBootErrorResponse'
+        '401': &id003
+          $ref: '#/components/responses/Unauthorized'
+        '403': &id004
+          $ref: '#/components/responses/Forbidden'
+  /api/warehouses/{warehouseId}/movements:
+    get:
+      tags:
+      - Movements
+      summary: List movement history
+      operationId: listMovements
+      description: Operator, planner or manager. Location matches either source or destination.
+      parameters:
+      - name: warehouseId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      - name: productId
+        in: query
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      - name: locationId
+        in: query
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date-time
+        description: Inclusive start
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date-time
+        description: Exclusive end
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: size
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: Movement history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryPage'
+        '400': *id001
+        '404': *id002
+        '401': *id003
+        '403': *id004
 components:
   schemas:
     CreateProductRequest:
@@ -919,6 +1028,10 @@ components:
           description: Human-readable ranking explanation; varies by strategy.
         scoreBreakdown:
           $ref: '#/components/schemas/ScoreBreakdown'
+        locationVersion:
+          type: integer
+          format: int64
+          minimum: 0
     RecommendationResponse:
       type: object
       properties:
@@ -941,8 +1054,7 @@ components:
             $ref: '#/components/schemas/RecommendationItemResponse'
     SpringBootErrorResponse:
       type: object
-      description: Default Spring Boot JSON error response observed in the development environment. ApiExceptionHandler
-        sets the HTTP status and servlet error reason, not a custom JSON body. Additional fields depend on configuration.
+      description: Business errors include message; framework errors may use the default Spring Boot response.
       properties:
         timestamp:
           type: string
@@ -957,6 +1069,8 @@ components:
         path:
           type: string
           example: /api/recommendations/batches/5
+        message:
+          type: string
       required:
       - timestamp
       - status
@@ -1080,6 +1194,148 @@ components:
           description: Token lifetime in seconds; default 1800.
         user:
           $ref: '#/components/schemas/UserResponse'
+    PlacementRequest:
+      type: object
+      properties:
+        batchId:
+          type: integer
+          format: int64
+          minimum: 1
+        locationId:
+          type: integer
+          format: int64
+          minimum: 1
+        locationVersion:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - batchId
+      - locationId
+      - locationVersion
+    PlacementResponse:
+      type: object
+      properties:
+        movementId:
+          type: integer
+          format: int64
+          minimum: 1
+        batchId:
+          type: integer
+          format: int64
+          minimum: 1
+        locationId:
+          type: integer
+          format: int64
+          minimum: 1
+        locationCode:
+          type: string
+        status:
+          type: string
+          enum:
+          - placed
+        occupiedVolumeDm3:
+          type: number
+        occupiedWeightKg:
+          type: number
+        placedAt:
+          type: string
+          format: date-time
+      required:
+      - movementId
+      - batchId
+      - locationId
+      - locationCode
+      - status
+      - occupiedVolumeDm3
+      - occupiedWeightKg
+      - placedAt
+    StockMovementResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        warehouseId:
+          type: integer
+          format: int64
+          minimum: 1
+        batchId:
+          type: integer
+          format: int64
+          minimum: 1
+        productId:
+          type: integer
+          format: int64
+          minimum: 1
+        performedBy:
+          type: integer
+          format: int64
+          minimum: 1
+        batchCode:
+          type: string
+        toLocationCode:
+          type: string
+        movementType:
+          type: string
+        fromLocationId:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+        fromLocationCode:
+          type: string
+          nullable: true
+        toLocationId:
+          type: integer
+          format: int64
+          minimum: 1
+        performedAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - warehouseId
+      - batchId
+      - productId
+      - performedBy
+      - batchCode
+      - toLocationCode
+      - movementType
+      - fromLocationId
+      - fromLocationCode
+      - toLocationId
+      - performedAt
+    HistoryPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockMovementResponse'
+        page:
+          type: integer
+          format: int64
+          minimum: 0
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+        totalPages:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - content
+      - page
+      - size
+      - totalElements
+      - totalPages
   securitySchemes:
     bearerAuth:
       type: http
