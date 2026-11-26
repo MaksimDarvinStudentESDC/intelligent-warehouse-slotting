@@ -1,0 +1,6 @@
+.movement-filters { margin-bottom: 1.25rem; }
+.movement-filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: 1rem; }
+.movement-actions, .movement-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.movement-pagination { justify-content: space-between; margin-top: 1rem; }
+.movement-history-table table { min-width: 64rem; }
+.movement-history-table td:nth-child(3), .movement-history-table td:nth-child(6), .movement-history-table td:nth-child(7) { white-space: nowrap; }

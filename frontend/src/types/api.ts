@@ -20,3 +20,26 @@ export interface PlacementResponse {
   occupiedWeightKg: number;
   placedAt: string;
 }
+
+export interface StockMovementResponse {
+  id: number;
+  warehouseId: number;
+  batchId: number;
+  batchCode: string;
+  productId: number;
+  fromLocationId: number | null;
+  fromLocationCode: string | null;
+  toLocationId: number;
+  toLocationCode: string;
+  movementType: string;
+  performedBy: number;
+  performedAt: string;
+}
+
+export interface MovementHistoryPageResponse {
+  content: StockMovementResponse[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}

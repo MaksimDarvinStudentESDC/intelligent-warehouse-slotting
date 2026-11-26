@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Warehouse, PackagePlus, Upload, ChartNoAxesCombined, MapPinned, House, Menu, X } from 'lucide-react';
+import { Warehouse, PackagePlus, Upload, ChartNoAxesCombined, MapPinned, House, Menu, X, History } from 'lucide-react';
 import {useAuth} from '../context/AuthContext';
 import {canAccess} from '../context/permissions';
 import LoginPage from '../pages/LoginPage';
 import HomePage from '../pages/HomePage';
 import ReceiveBatchPage from '../pages/ReceiveBatchPage';
 import LocationsPage from '../pages/LocationsPage';
+import MovementHistoryPage from '../pages/MovementHistoryPage';
 import PlaceholderPage from '../pages/PlaceholderPage';
 
 const navigation = [
@@ -15,6 +16,7 @@ const navigation = [
   { to: '/import', label: 'Data import', icon: Upload },
   { to: '/compare', label: 'Compare strategies', icon: ChartNoAxesCombined },
   { to: '/locations', label: 'Locations', icon: MapPinned },
+  { to: '/movements', label: 'Movement history', icon: History },
 ];
 
 function AppLayout() {
@@ -76,6 +78,7 @@ function AppLayout() {
             <Route path="/import" element={<PlaceholderPage title="Data import" detail="CSV validation and import will be connected when backend endpoints are available." />} />
             <Route path="/compare" element={<PlaceholderPage title="Compare strategies" detail="B1 / B2 / Optimized experiment runner is planned for the next integration stage." />} />
             <Route path="/locations" element={<LocationsPage />} />
+            <Route path="/movements" element={<MovementHistoryPage />} />
           </Routes>}
         </div>
       </main>
