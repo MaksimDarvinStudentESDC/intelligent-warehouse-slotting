@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {useMutation} from '@tanstack/react-query';
+import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import {z} from 'zod';
@@ -9,6 +9,7 @@ import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
 import Alert from '../components/ui/Alert';
 import {createBatch, recommend} from '../services/batchService';
+import {confirmPlacement} from '../services/placementService';
 import type {RecommendationResult} from '../types/api';
 
 const schema = z.object({
@@ -35,12 +36,20 @@ function localToday(): string {
 }
 
 export default function ReceiveBatchPage() {
+  const queryClient = useQueryClient();
   const [error, setError] = useState('');
   const [result, setResult] = useState<RecommendationResult | null>(null);
   const [selection, setSelection] = useState<number | null>(null);
   const [createdBatchId, setCreatedBatchId] = useState<number | null>(null);
   const batchMutation = useMutation({mutationFn: createBatch});
   const recommendationMutation = useMutation({mutationFn: recommend});
+  const placementMutation = useMutation({
+    mutationFn: confirmPlacement,
+    retry: false,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({queryKey: ['locations']});
+    },
+  });
   const today = localToday();
 
   const {register, handleSubmit, formState: {errors}} = useForm<FormValues>({
@@ -60,6 +69,8 @@ export default function ReceiveBatchPage() {
   }
 
   async function submit(values: FormValues) {
+    if (placementMutation.isPending) return;
+    placementMutation.reset();
     setError('');
     setResult(null);
     setSelection(null);
@@ -85,6 +96,22 @@ export default function ReceiveBatchPage() {
   }
 
   const pending = batchMutation.isPending || recommendationMutation.isPending;
+  const selected = result?.recommendations.find(item => item.locationId === selection);
+  const placed = placementMutation.isSuccess;
+
+  async function confirm() {
+    if (!result || !selected || pending || placementMutation.isPending || placed) return;
+    setError('');
+    try {
+      await placementMutation.mutateAsync({
+        batchId: result.batchId,
+        locationId: selected.locationId,
+        locationVersion: selected.locationVersion,
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to confirm placement.');
+    }
+  }
 
   return <>
     <div className="eyebrow">OPERATIONS / RECEIVE</div>
@@ -105,7 +132,7 @@ export default function ReceiveBatchPage() {
             error={errors.quantity?.message} required {...register('quantity')}/>
           <Input id="expiry" label="Expiry date (if applicable)" type="date" min={today}
             error={errors.expiry?.message} {...register('expiry')}/>
-          <Button loading={pending} type="submit">Get recommendation</Button>
+          <Button loading={pending} disabled={placementMutation.isPending} type="submit">Get recommendation</Button>
         </form>
         {createdBatchId !== null && !result && !recommendationMutation.isPending && <div>
           <p className="hint">Batch #{createdBatchId} was registered. Recommendations could not be loaded.</p>
@@ -121,20 +148,22 @@ export default function ReceiveBatchPage() {
           <div className="success">Batch #{result.batchId} registered · {result.feasibleCount} feasible locations</div>
           {result.recommendations.length === 0 ?
             <Alert tone="warning">No suitable location is available. Review the batch and location constraints.</Alert> : <>
-              <p className="hint">Select a feasible location. Placement confirmation requires a backend endpoint and is not enabled yet.</p>
+              <p className="hint">Select a feasible location and confirm placement.</p>
               {result.recommendations.map(item => <label
                 className={'recommendation ' + (selection === item.locationId ? 'selected' : '')}
                 key={item.locationId}>
                 <input type="radio" name="location" checked={selection === item.locationId}
+                  disabled={placementMutation.isPending || placed}
                   onChange={() => setSelection(item.locationId)}/>
                 <span><strong>#{item.rank} · {item.locationCode}</strong>
                   {item.rank === 1 && <span className="pill">Best match</span>}
                   <small>{item.distanceMeters} m · {item.explanation}</small>
                 </span>
               </label>)}
-              <button className="primary" disabled title="Awaiting backend placement confirmation endpoint">
-                Confirm placement (coming soon)
-              </button>
+              <Button type="button" loading={placementMutation.isPending}
+                disabled={!selected || pending || placed} onClick={() => void confirm()}>
+                {placed ? 'Placement confirmed' : 'Confirm placement'}
+              </Button>
             </>}
         </>}
       </Card>

@@ -33,13 +33,22 @@ test('receives a batch and shows ranked location recommendations', async ({ page
       body: JSON.stringify({
         batchId: 42, strategy: 'ABC_XYZ', feasibleCount: 1,
         recommendations: [{
-          rank: 1, locationId: 12, locationCode: 'ST-12',
+          rank: 1, locationVersion: 0, locationId: 12, locationCode: 'ST-12',
           distanceMeters: 18.5, explanation: 'Compatible location with available capacity',
         }],
       }),
     });
   });
 
+  let placementRequests = 0;
+  await page.route('**/api/placements/confirm', async route => {
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().postDataJSON()).toEqual({batchId: 42, locationId: 12, locationVersion: 0});
+    placementRequests++;
+    await route.fulfill({status: 201, json: {movementId: 1, batchId: 42, locationId: 12,
+      locationCode: 'ST-12', status: 'placed', occupiedVolumeDm3: 10, occupiedWeightKg: 5,
+      placedAt: '2026-11-25T19:08:34Z'}});
+  });
   await signIn(page, '/receive');
   await page.getByLabel('Product ID *').fill('1');
   await page.getByLabel('Batch code *').fill('E2E-BATCH-001');
@@ -51,4 +60,7 @@ test('receives a batch and shows ranked location recommendations', async ({ page
   await expect(page.getByText('Best match')).toBeVisible();
   expect(batchCreated).toBe(true);
   expect(recommendationRequested).toBe(true);
+  await page.getByRole('button', {name: 'Confirm placement'}).click();
+  await expect(page.getByRole('button', {name: 'Placement confirmed'})).toBeDisabled();
+  expect(placementRequests).toBe(1);
 });
