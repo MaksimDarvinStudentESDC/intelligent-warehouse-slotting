@@ -8,6 +8,7 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
 import Alert from '../components/ui/Alert';
+import PlacementSuccessCard from '../components/PlacementSuccessCard';
 import {createBatch, recommend} from '../services/batchService';
 import {ApiError} from '../services/apiClient';
 import {confirmPlacement} from '../services/placementService';
@@ -54,7 +55,7 @@ export default function ReceiveBatchPage() {
   });
   const today = localToday();
 
-  const {register, handleSubmit, formState: {errors}} = useForm<FormValues>({
+  const {register, handleSubmit, reset, setFocus, formState: {errors}} = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {productId: '', batchCode: '', quantity: '1', expiry: ''},
   });
@@ -72,7 +73,7 @@ export default function ReceiveBatchPage() {
   }
 
   async function submit(values: FormValues) {
-    if (placementMutation.isPending) return;
+    if (placementMutation.isPending || placementMutation.isSuccess) return;
     placementMutation.reset();
     setConflict(null);
     setError('');
@@ -102,6 +103,20 @@ export default function ReceiveBatchPage() {
   const pending = batchMutation.isPending || recommendationMutation.isPending;
   const selected = result?.recommendations.find(item => item.locationId === selection);
   const placed = placementMutation.isSuccess;
+
+  function receiveAnotherBatch() {
+    placementMutation.reset();
+    batchMutation.reset();
+    recommendationMutation.reset();
+    setConflict(null);
+    setError('');
+    setResult(null);
+    setSelection(null);
+    setCreatedBatchId(null);
+    reset();
+    // Focus after the disabled fieldset has been enabled again.
+    requestAnimationFrame(() => setFocus('productId'));
+  }
 
   async function confirm() {
     if (!result || !selected || pending || placementMutation.isPending || placed || conflict) return;
@@ -137,6 +152,7 @@ export default function ReceiveBatchPage() {
         <p className="hint">Fields marked * are required.</p>
         {error && <Alert tone="error" title="Check the request">{error}</Alert>}
         <form noValidate onSubmit={handleSubmit(submit)}>
+          <fieldset disabled={placed || placementMutation.isPending} style={{border: 0, padding: 0, margin: 0, minWidth: 0}}>
           <Input id="product" label="Product ID *" type="number" min="1" step="1"
             placeholder="Existing product ID" hint="Temporary ID input until GET /api/products is implemented."
             error={errors.productId?.message} required {...register('productId')}/>
@@ -146,7 +162,8 @@ export default function ReceiveBatchPage() {
             error={errors.quantity?.message} required {...register('quantity')}/>
           <Input id="expiry" label="Expiry date (if applicable)" type="date" min={today}
             error={errors.expiry?.message} {...register('expiry')}/>
-          <Button loading={pending} disabled={placementMutation.isPending} type="submit">Get recommendation</Button>
+          <Button loading={pending} disabled={placementMutation.isPending || placed} type="submit">Get recommendation</Button>
+                  </fieldset>
         </form>
         {createdBatchId !== null && !result && !recommendationMutation.isPending && <div>
           <p className="hint">Batch #{createdBatchId} was registered. Recommendations could not be loaded.</p>
@@ -174,7 +191,7 @@ export default function ReceiveBatchPage() {
           <div className="success">Batch #{result.batchId} registered · {result.feasibleCount} feasible locations</div>
           {result.recommendations.length === 0 ?
             <Alert tone="warning">No suitable location is available. Review the batch and location constraints.</Alert> : <>
-              <p className="hint">Select a feasible location and confirm placement.</p>
+              {!placed && <p className="hint">Select a feasible location and confirm placement.</p>}
               {result.recommendations.map(item => <label
                 className={'recommendation ' + (selection === item.locationId ? 'selected' : '')}
                 key={item.locationId}>
@@ -192,6 +209,8 @@ export default function ReceiveBatchPage() {
               </Button>
             </>}
         </>}
+        {placed && placementMutation.data && <PlacementSuccessCard
+          placement={placementMutation.data} onReceiveAnotherBatch={receiveAnotherBatch}/>}
       </Card>
     </div>
   </>;

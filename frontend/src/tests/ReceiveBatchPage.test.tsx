@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {cleanup, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {cleanup, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import ReceiveBatchPage from '../pages/ReceiveBatchPage';
 import {createBatch, recommend} from '../services/batchService';
@@ -171,5 +171,34 @@ describe('ReceiveBatchPage', () => {
     await screen.findByText(/This batch is no longer awaiting placement/);
     expect(screen.queryByRole('button', {name: 'Refresh recommendations'})).toBeNull();
     expect((screen.getByRole('button', {name: 'Confirm placement'}) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows server placement details and resets the form for another batch', async () => {
+    createBatchMock.mockResolvedValue({id: 42} as Awaited<ReturnType<typeof createBatch>>);
+    recommendMock.mockResolvedValue({batchId: 42, strategy: 'optimized', feasibleCount: 1, recommendations: [
+      {rank: 1, locationId: 7, locationVersion: 0, locationCode: 'ST-07', distanceMeters: 12, explanation: 'Enough capacity'}
+    ]});
+    vi.mocked(confirmPlacement).mockResolvedValue({movementId: 81, batchId: 42, locationId: 7,
+      locationCode: 'ST-07', status: 'placed', occupiedVolumeDm3: 150, occupiedWeightKg: 75,
+      placedAt: '2026-11-25T19:08:34Z'});
+    renderPage(); fillValidFields(); submit();
+    await screen.findByRole('radio', {name: /ST-07/});
+    fireEvent.click(screen.getByRole('button', {name: 'Confirm placement'}));
+    const card = await screen.findByRole('region', {name: 'Placement result'});
+    for (const value of ['#42', '#81', 'ST-07', 'Placed', '150 dm³', '75 kg']) {
+      expect(within(card).getByText(value)).toBeTruthy();
+    }
+    expect(card.querySelector('time')?.dateTime).toBe('2026-11-25T19:08:34Z');
+    expect((screen.getByRole('button', {name: 'Get recommendation'}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(card).getByRole('button', {name: 'Receive another batch'}));
+    expect(screen.queryByRole('region', {name: 'Placement result'})).toBeNull();
+    expect(screen.getByText('No recommendation yet')).toBeTruthy();
+    expect((screen.getByRole('spinbutton', {name: /Product ID/}) as HTMLInputElement).value).toBe('');
+    expect((screen.getByRole('textbox', {name: /Batch code/}) as HTMLInputElement).value).toBe('');
+    expect((screen.getByRole('spinbutton', {name: /Quantity/}) as HTMLInputElement).value).toBe('1');
+    expect((screen.getByLabelText(/Expiry date/) as HTMLInputElement).value).toBe('');
+    expect(createBatchMock).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(confirmPlacement)).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole('button', {name: 'Get recommendation'}) as HTMLButtonElement).disabled).toBe(false);
   });
 });

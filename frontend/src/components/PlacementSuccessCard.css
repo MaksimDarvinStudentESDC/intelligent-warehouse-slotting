@@ -1,0 +1,16 @@
+.placement-success-card {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+.placement-success-card .ui-alert { margin-top: 0; }
+.placement-success-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.placement-success-details dt { color: var(--color-muted); font-size: .875rem; }
+.placement-success-details dd { margin: .25rem 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.placement-success-card h3 { font-size: 1rem; }
