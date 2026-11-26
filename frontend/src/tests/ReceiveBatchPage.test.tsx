@@ -4,6 +4,7 @@ import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import ReceiveBatchPage from '../pages/ReceiveBatchPage';
 import {createBatch, recommend} from '../services/batchService';
 
+import {ApiError} from '../services/apiClient';
 import {confirmPlacement} from '../services/placementService';
 
 vi.mock('../services/placementService', () => ({confirmPlacement: vi.fn()}));
@@ -131,5 +132,44 @@ describe('ReceiveBatchPage', () => {
     expect(client.getQueryState(['locations', 1])?.isInvalidated).toBe(false);
     expect(client.getQueryState(['locations', 2])?.isInvalidated).toBe(false);
     expect(client.getQueryState(['unrelated'])?.isInvalidated).toBe(false);
+  });
+  it('blocks stale recommendations and refreshes the same batch before explicit confirmation', async () => {
+    createBatchMock.mockResolvedValue({id: 42} as Awaited<ReturnType<typeof createBatch>>);
+    const first = {batchId: 42, strategy: 'optimized', feasibleCount: 1, recommendations: [
+      {rank: 1, locationId: 7, locationVersion: 0, locationCode: 'ST-07', distanceMeters: 12, explanation: 'Enough capacity'}
+    ]};
+    recommendMock.mockResolvedValueOnce(first).mockResolvedValueOnce({...first, recommendations: [
+      {...first.recommendations[0], locationVersion: 1}
+    ]});
+    vi.mocked(confirmPlacement).mockRejectedValueOnce(new ApiError(409, JSON.stringify({message: 'STALE_RECOMMENDATION'})))
+      .mockResolvedValueOnce({movementId: 1, batchId: 42, locationId: 7, locationCode: 'ST-07', status: 'placed',
+        occupiedVolumeDm3: 10, occupiedWeightKg: 5, placedAt: '2026-11-25T19:08:34Z'});
+    renderPage(); fillValidFields(); submit();
+    await screen.findByRole('radio', {name: /ST-07/});
+    fireEvent.click(screen.getByRole('button', {name: 'Confirm placement'}));
+    fireEvent.click(await screen.findByRole('button', {name: 'Refresh recommendations'}));
+    await waitFor(() => expect(screen.queryByRole('button', {name: 'Refresh recommendations'})).toBeNull());
+    expect(createBatchMock).toHaveBeenCalledTimes(1);
+    expect(recommendMock).toHaveBeenCalledTimes(2);
+    expect(recommendMock).toHaveBeenLastCalledWith(42, expect.anything());
+    expect(vi.mocked(confirmPlacement)).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole('button', {name: 'Confirm placement'}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('radio', {name: /ST-07/}));
+    fireEvent.click(screen.getByRole('button', {name: 'Confirm placement'}));
+    await screen.findByRole('button', {name: 'Placement confirmed'});
+    expect(vi.mocked(confirmPlacement)).toHaveBeenLastCalledWith({batchId: 42, locationId: 7, locationVersion: 1}, expect.anything());
+  });
+  it('blocks further confirmation when the batch is no longer awaiting placement', async () => {
+    createBatchMock.mockResolvedValue({id: 42} as Awaited<ReturnType<typeof createBatch>>);
+    recommendMock.mockResolvedValue({batchId: 42, strategy: 'optimized', feasibleCount: 1, recommendations: [
+      {rank: 1, locationId: 7, locationVersion: 0, locationCode: 'ST-07', distanceMeters: 12, explanation: 'Enough capacity'}
+    ]});
+    vi.mocked(confirmPlacement).mockRejectedValueOnce(new ApiError(409, 'BATCH_NOT_AWAITING_PUTAWAY'));
+    renderPage(); fillValidFields(); submit();
+    await screen.findByRole('radio', {name: /ST-07/});
+    fireEvent.click(screen.getByRole('button', {name: 'Confirm placement'}));
+    await screen.findByText(/This batch is no longer awaiting placement/);
+    expect(screen.queryByRole('button', {name: 'Refresh recommendations'})).toBeNull();
+    expect((screen.getByRole('button', {name: 'Confirm placement'}) as HTMLButtonElement).disabled).toBe(true);
   });
 });

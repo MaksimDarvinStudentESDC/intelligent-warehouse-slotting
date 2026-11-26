@@ -9,6 +9,7 @@ import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
 import Alert from '../components/ui/Alert';
 import {createBatch, recommend} from '../services/batchService';
+import {ApiError} from '../services/apiClient';
 import {confirmPlacement} from '../services/placementService';
 import type {RecommendationResult} from '../types/api';
 
@@ -37,6 +38,7 @@ function localToday(): string {
 
 export default function ReceiveBatchPage() {
   const queryClient = useQueryClient();
+  const [conflict, setConflict] = useState<{reason: string; terminal: boolean} | null>(null);
   const [error, setError] = useState('');
   const [result, setResult] = useState<RecommendationResult | null>(null);
   const [selection, setSelection] = useState<number | null>(null);
@@ -57,11 +59,12 @@ export default function ReceiveBatchPage() {
     defaultValues: {productId: '', batchCode: '', quantity: '1', expiry: ''},
   });
 
-  async function requestRecommendations(batchId: number) {
+  async function requestRecommendations(batchId: number, refresh = false) {
     try {
       const recommendations = await recommendationMutation.mutateAsync(batchId);
       setResult(recommendations);
-      setSelection(recommendations.recommendations[0]?.locationId ?? null);
+      setSelection(refresh ? null : recommendations.recommendations[0]?.locationId ?? null);
+      setConflict(null);
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to request recommendations.');
@@ -71,6 +74,7 @@ export default function ReceiveBatchPage() {
   async function submit(values: FormValues) {
     if (placementMutation.isPending) return;
     placementMutation.reset();
+    setConflict(null);
     setError('');
     setResult(null);
     setSelection(null);
@@ -100,7 +104,7 @@ export default function ReceiveBatchPage() {
   const placed = placementMutation.isSuccess;
 
   async function confirm() {
-    if (!result || !selected || pending || placementMutation.isPending || placed) return;
+    if (!result || !selected || pending || placementMutation.isPending || placed || conflict) return;
     setError('');
     try {
       await placementMutation.mutateAsync({
@@ -109,7 +113,17 @@ export default function ReceiveBatchPage() {
         locationVersion: selected.locationVersion,
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to confirm placement.');
+      if (cause instanceof ApiError && cause.status === 409) {
+        let reason = cause.message;
+        try {
+          const body = JSON.parse(reason);
+          if (typeof body?.message === 'string') reason = body.message;
+        } catch { /* Plain-text error response. */ }
+        setConflict({reason, terminal: reason === 'BATCH_NOT_AWAITING_PUTAWAY'});
+        setSelection(null);
+      } else {
+        setError(cause instanceof Error ? cause.message : 'Unable to confirm placement.');
+      }
     }
   }
 
@@ -143,6 +157,18 @@ export default function ReceiveBatchPage() {
       </Card>
       <Card className="panel">
         <h2>2. Ranked locations</h2>
+        {conflict && <>
+          <Alert tone="warning" title="Placement conflict">
+            {conflict.reason}. {conflict.terminal
+              ? 'This batch is no longer awaiting placement. Check its current status before continuing.'
+              : 'Refresh recommendations before selecting a location again.'}
+          </Alert>
+          {!conflict.terminal && createdBatchId !== null && <Button type="button"
+            loading={recommendationMutation.isPending}
+            onClick={() => void requestRecommendations(createdBatchId, true)}>
+            Refresh recommendations
+          </Button>}
+        </>}
         {!result ? <div className="empty"><MapPinned size={36}/><h3>No recommendation yet</h3>
           <p>Enter batch details and request a recommendation to see feasible storage locations.</p></div> : <>
           <div className="success">Batch #{result.batchId} registered · {result.feasibleCount} feasible locations</div>
@@ -153,7 +179,7 @@ export default function ReceiveBatchPage() {
                 className={'recommendation ' + (selection === item.locationId ? 'selected' : '')}
                 key={item.locationId}>
                 <input type="radio" name="location" checked={selection === item.locationId}
-                  disabled={placementMutation.isPending || placed}
+                  disabled={placementMutation.isPending || placed || !!conflict || pending}
                   onChange={() => setSelection(item.locationId)}/>
                 <span><strong>#{item.rank} · {item.locationCode}</strong>
                   {item.rank === 1 && <span className="pill">Best match</span>}
@@ -161,7 +187,7 @@ export default function ReceiveBatchPage() {
                 </span>
               </label>)}
               <Button type="button" loading={placementMutation.isPending}
-                disabled={!selected || pending || placed} onClick={() => void confirm()}>
+                disabled={!selected || pending || placed || !!conflict} onClick={() => void confirm()}>
                 {placed ? 'Placement confirmed' : 'Confirm placement'}
               </Button>
             </>}
