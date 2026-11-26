@@ -632,7 +632,7 @@ paths:
       - Placement
       summary: Confirm placement
       operationId: confirmPlacement
-      description: Operator only. Uses the authenticated account ID and checks the recommendation version.
+      description: Operator only. Uses the authenticated account ID, locks batch and location, checks the recommendation version and revalidates hard constraints before recording putaway.
       requestBody:
         required: true
         content:
@@ -659,7 +659,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SpringBootErrorResponse'
         '409':
-          description: Placement conflict
+          description: Placement conflict (stale recommendation, already placed batch, warehouse mismatch or failed hard constraints)
           content:
             application/json:
               schema:
@@ -674,7 +674,7 @@ paths:
       - Movements
       summary: List movement history
       operationId: listMovements
-      description: Operator, planner or manager. Location matches either source or destination.
+      description: Operator, planner or manager. Location matches either source or destination. Results are ordered by performedAt descending, then id descending. Filters are combined with AND.
       parameters:
       - name: warehouseId
         in: path

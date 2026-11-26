@@ -2,13 +2,13 @@
 
 ## Scope and authority
 
-This document records the implemented access policy for API v0.1.0, supporting BA US8.2. `SecurityConfig.java` is the authoritative backend policy; `frontend/src/context/permissions.ts` controls UI route access. The policy is deny by default. See [Security Architecture](security.md) and the [OpenAPI specification](../api/openapi.yaml).
+This document records the implemented access policy for API v0.1.0, supporting BA US8.2. `SecurityConfig.java` is the authoritative backend policy; `frontend/src/context/permissions.ts` controls UI route access. The policy is deny by default. See [Security Architecture](security.md) and the [OpenAPI specification](api/openapi.yaml).
 
 ## Roles
 
 | Database / API role | Spring Security authority | Intended responsibility |
 |---|---|---|
-| `operator` | `ROLE_OPERATOR` | Incoming batch registration, constraint checks and placement recommendations |
+| `operator` | `ROLE_OPERATOR` | Incoming batch registration, recommendations, confirmation and movement history |
 | `planner` | `ROLE_PLANNER` | Product catalog creation, classification and planning |
 | `manager` | `ROLE_MANAGER` | Warehouse monitoring |
 | `business_manager` | `ROLE_BUSINESS_MANAGER` | Business-level evaluation (planned) |
@@ -31,6 +31,8 @@ Allow means the security layer permits the request; business validation may stil
 | `GET /api/constraints/batches/{batchId}/locations/{locationId}` | Allow | Deny | Deny | Deny | Deny |
 | `GET /api/recommendations/batches/{batchId}` | Allow | Deny | Deny | Deny | Deny |
 | `POST /api/classifications/run` | Deny | Allow | Deny | Deny | Deny |
+| `POST /api/placements/confirm` | Allow | Deny | Deny | Deny | Deny |
+| `GET /api/warehouses/{warehouseId}/movements` | Allow | Allow | Allow | Deny | Deny |
 | Unspecified API endpoints | Deny | Deny | Deny | Deny | Deny |
 
 Swagger UI (`/swagger-ui.html`, `/swagger-ui/**`), `/v3/api-docs/**` and `/openapi.yaml` are public. Internal ERROR dispatches are permitted. Authentication uses the current active database account and role on each Bearer-authenticated request, regardless of the role embedded in the token.
@@ -40,8 +42,9 @@ Swagger UI (`/swagger-ui.html`, `/swagger-ui/**`), `/v3/api-docs/**` and `/opena
 | Route | Operator | Planner | Manager | Business Manager | Admin | Status |
 |---|---|---|---|---|---|---|
 | `/` Home | Allow | Allow | Allow | Allow | Allow | Implemented |
-| `/receive` Receive batch | Allow | Deny | Deny | Deny | Deny | Registration and recommendations; confirmation not implemented |
+| `/receive` Receive batch | Allow | Deny | Deny | Deny | Deny | Registration, recommendations and confirmation |
 | `/locations` Locations | Allow | Allow | Allow | Deny | Deny | Read-only |
+| `/movements` Movement history | Allow | Allow | Allow | Deny | Deny | Implemented |
 | `/import` Data import | Deny | Allow | Deny | Deny | Deny | Placeholder |
 | `/compare` Compare strategies | Deny | Allow | Allow | Allow | Deny | Placeholder |
 
@@ -53,7 +56,6 @@ The following are proposed allocations for future BA functionality, not current 
 
 | Capability | Proposed roles |
 |---|---|
-| Confirm placement and record operator decisions | Operator |
 | Manage warehouse zones, locations and capacity | Manager |
 | Maintain catalog and import data | Planner |
 | Run comparative experiments | Planner |
@@ -66,3 +68,5 @@ The following are proposed allocations for future BA functionality, not current 
 The manual RBAC matrix covered five roles across nine protected/unknown endpoint cases (45 checks). Automated MockMvc tests reproduce these combinations and check unauthorized requests, inactive/missing accounts and login behavior. Allowed POST cases use malformed JSON and expect 400 to demonstrate passage through authorization without modifying data; they do not demonstrate successful business writes. The JWT role claim in the matrix tests intentionally differs from some database roles to verify that the database role is authoritative. Playwright covers login/logout, denied receiving access for Manager and Bearer/401 behavior with mocked API responses.
 
 For every new endpoint, define permitted roles explicitly, add the method/path matcher before the deny-all rule, update both OpenAPI copies and this matrix, and add positive and negative authorization tests. Update frontend permissions only when a corresponding route is introduced or changed. Do not grant broad wildcard access merely to make tests pass.
+
+Stage 8.5: desktop navigation was manually verified for all five roles; direct-route denial, login redirect and mobile navigation were confirmed by the operator of the development environment. Existing automated suites were reported passing.

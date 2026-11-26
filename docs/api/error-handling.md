@@ -6,7 +6,7 @@ This guide describes the current backend implementation and the JSON error forma
 
 ## Centralized business exception handling
 
-`ApiExceptionHandler` is a `@RestControllerAdvice` that handles `UseCaseException` and calls `HttpServletResponse.sendError(status, message)`.
+`ApiExceptionHandler` is a `@RestControllerAdvice` that handles `UseCaseException` and returns `ResponseEntity<BusinessError>` with timestamp, status, error, path and message.
 
 | Exception kind | HTTP status |
 |---|---|
@@ -36,7 +36,7 @@ For requests accepting JSON, the default Spring Boot error response observed in 
 | `error` | string | General HTTP error label |
 | `path` | string | Request path |
 
-The handler sets the servlet error reason but does not serialize a custom JSON body. The current application configuration does not explicitly enable exception messages in error bodies. Clients must not assume that `message`, `details`, `code` or `fieldErrors` are present. Content negotiation and deployment settings may affect the response format. The API does not currently guarantee a Problem Details (RFC 9457) response.
+Business exceptions now serialize `message` explicitly. Framework validation and security errors may have a different body; clients must not assume `message`, `details`, `code` or `fieldErrors` are always present. Content negotiation and deployment settings may affect the response format. The API does not currently guarantee a Problem Details (RFC 9457) response.
 
 ## Endpoint status codes
 
@@ -51,6 +51,8 @@ The handler sets the servlet error reason but does not serialize a custom JSON b
 | GET `/api/constraints/batches/{batchId}/locations/{locationId}` | 200 | 400, 404 |
 | GET `/api/recommendations/batches/{batchId}` | 200 | 400, 404 |
 | POST `/api/classifications/run` | 201 | 400, 404 |
+| POST `/api/placements/confirm` | 201 | 400, 404, 409 |
+| GET `/api/warehouses/{warehouseId}/movements` | 200 | 400, 404 |
 
 Unexpected server failures may produce HTTP 500. No custom 500 response contract is defined. Protected endpoints require a valid Bearer JWT. Missing or invalid tokens and inactive or missing accounts produce 401; authenticated accounts without the required role receive 403. Login returns 401 for invalid credentials and 400 for invalid input. Security errors do not guarantee the JSON structure described above. The public login endpoint does not require a token.
 
@@ -91,11 +93,11 @@ A constraint check may return HTTP 200 with `feasible: false` and rejection reas
 | Recommendation topN=0 | 400 | Manual test N4 passed |
 | INVALID_INPUT / NOT_FOUND / CONFLICT mapping | 400 / 404 / 409 | Parameterized handler test in repository |
 
-The handler test checks the status and servlet error reason using standalone MockMvc. It does not verify the serialized JSON after a real servlet error dispatch. Duplicate SKU and batch-code responses are implemented, but a successful live database integration test for these scenarios is not established by this review.
+The handler test checks HTTP status and the serialized `message` using MockMvc. Duplicate SKU and batch-code responses are implemented, but a successful live database integration test for these scenarios is not established by this review.
 
 ## Client handling
 
-Use the HTTP status as the primary error signal. For 401, reauthenticate; for 403, check the required role rather than retrying with the same credentials. For 400, correct input; for 404, verify resource identifiers; for 409, resolve the duplicate before retrying. Display a general fallback message if no detailed message is returned. Do not treat a successful constraint rejection as an HTTP failure.
+Use the HTTP status as the primary error signal. For 401, reauthenticate; for 403, check the required role rather than retrying with the same credentials. For 400, correct input; for 404, verify resource identifiers; for 409, inspect the business reason before retrying. Display a general fallback message if no detailed message is returned. Do not treat a successful constraint rejection as an HTTP failure.
 
 ## Swagger UI and contract maintenance
 
@@ -104,3 +106,7 @@ The canonical specification is [openapi.yaml](./openapi.yaml). Keep the served c
 See [Getting Started](./README.md), [Integration Tutorial](./integration-tutorial.md) and [API Validation Results](./validation-results.md).
 
 A future enhancement could introduce a stable machine-readable error code and field-level validation details. Such a change requires coordinated backend, test and OpenAPI updates.
+
+## Placement conflicts
+
+`STALE_RECOMMENDATION`, `WAREHOUSE_MISMATCH`, `BATCH_NOT_AWAITING_PUTAWAY` and hard-constraint rejection reasons are returned as HTTP 409 business messages. Refresh recommendations for the same registered batch and explicitly select a location again for recoverable conflicts. An already placed batch must not be confirmed again. Movement history currently displays raw JSON for some errors; friendly formatting is deferred.

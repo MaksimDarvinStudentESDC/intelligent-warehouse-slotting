@@ -255,8 +255,12 @@ Actual identifiers and values depend on database contents. A successful response
 | GET | `/api/constraints/batches/{batchId}/locations/{locationId}` | Evaluate storage constraints |
 | GET | `/api/recommendations/batches/{batchId}` | Generate ranked recommendations |
 | POST | `/api/classifications/run` | Execute ABC/XYZ classification |
+| POST | `/api/placements/confirm` | Confirm a putaway (operator) |
+| GET | `/api/warehouses/{warehouseId}/movements` | Filter and page movement history (operator, planner, manager) |
 
 Login is public. All other listed operations require a Bearer token. Product creation and classification require planner; batch creation, constraint checks and recommendations require operator; warehouse lists allow operator, planner and manager. All five roles can access `/api/auth/me`. Unspecified endpoints are denied (except explicitly public documentation resources).
+
+Placement confirmation requires the selected recommendation’s `locationVersion`. See the [integration tutorial](integration-tutorial.md) for confirmation and history examples.
 
 For complete request and response models, consult the OpenAPI specification.
 

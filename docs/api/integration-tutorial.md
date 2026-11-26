@@ -218,6 +218,7 @@ curl -i -H "Authorization: Bearer $OPERATOR_TOKEN" 'http://localhost:8080/api/re
   "recommendations": [
     {
       "rank": 1,
+      "locationVersion": 0,
       "locationId": 9,
       "locationCode": "ST-09",
       "distanceMeters": 35,
@@ -225,6 +226,7 @@ curl -i -H "Authorization: Bearer $OPERATOR_TOKEN" 'http://localhost:8080/api/re
     },
     {
       "rank": 2,
+      "locationVersion": 0,
       "locationId": 10,
       "locationCode": "ST-10",
       "distanceMeters": 40,
@@ -232,6 +234,7 @@ curl -i -H "Authorization: Bearer $OPERATOR_TOKEN" 'http://localhost:8080/api/re
     },
     {
       "rank": 3,
+      "locationVersion": 0,
       "locationId": 11,
       "locationCode": "ST-11",
       "distanceMeters": 45,
@@ -239,6 +242,7 @@ curl -i -H "Authorization: Bearer $OPERATOR_TOKEN" 'http://localhost:8080/api/re
     },
     {
       "rank": 4,
+      "locationVersion": 0,
       "locationId": 12,
       "locationCode": "ST-12",
       "distanceMeters": 55,
@@ -248,9 +252,33 @@ curl -i -H "Authorization: Bearer $OPERATOR_TOKEN" 'http://localhost:8080/api/re
 }
 ```
 
-**Interpretation:** Eight locations failed hard constraints, leaving four feasible candidates. The implemented `nearest_feasible` strategy ranks them by ascending distance to picking. Since only four are feasible, `topN=5` returns four recommendations. This is **not** confirmation that stock was moved or that the planned multi-criteria ABC/XYZ optimization has been implemented.
+The version fields above are illustrative additions to the historical response; use actual returned versions.
 
-## Step 7 — Optional: run ABC/XYZ classification
+**Interpretation:** Eight locations failed hard constraints, leaving four feasible candidates. The implemented `nearest_feasible` strategy ranks them by ascending distance to picking. Since only four are feasible, `topN=5` returns four recommendations. This is **not** confirmation that stock was moved or that the weighted strategy was exercised.
+
+## Step 7 — Confirm placement
+
+Use the actual batch ID and selected recommendation's `locationId` and `locationVersion` from Step 6. The following values are illustrative, not a replay of the historical dataset.
+
+```bash
+curl -i -X POST 'http://localhost:8080/api/placements/confirm' \
+  -H "Authorization: Bearer $OPERATOR_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"batchId":5,"locationId":9,"locationVersion":0}'
+```
+
+Expected: `201 Created` with `movementId`, `batchId`, `locationId`, `locationCode`, `status` (`placed`), `occupiedVolumeDm3`, `occupiedWeightKg` and `placedAt`. Occupancy is the total after placement, not the increment. The authenticated account supplies the operator ID. A duplicate confirmation returns 409. On a stale recommendation, request recommendations again for the same batch, select a current candidate and use its new version; do not register another batch.
+
+## Step 8 — Read movement history
+
+```bash
+curl -i -H "Authorization: Bearer $OPERATOR_TOKEN" 'http://localhost:8080/api/warehouses/1/movements?page=0&size=20'
+curl -i -H "Authorization: Bearer $OPERATOR_TOKEN" 'http://localhost:8080/api/warehouses/1/movements?productId=1&locationId=9&from=2026-11-26T00:00:00Z&to=2026-11-27T00:00:00Z&page=0&size=20'
+```
+
+Expected: 200 with `content`, `page`, `size`, `totalElements`, `totalPages`. Each row includes movement, warehouse, batch and product IDs, batch code, source and destination IDs/codes, movement type, operator ID and timestamp. Putaway source is null. Filters combine with AND; location matches either source or destination. Start is inclusive, end exclusive; page is zero-based, size 1–100. Results sort by performedAt descending then ID descending. Unknown warehouse returns 404; invalid filters return 400. Planner and manager can also read history.
+
+## Step 9 — Optional: run ABC/XYZ classification
 
 Classification is a separate API operation; its results are **not demonstrated as inputs** to the current `nearest_feasible` ranking.
 
@@ -304,6 +332,8 @@ The observed error body uses Spring Boot's standard fields (`timestamp`, `status
 - [ ] Active locations retrieved (`200`).
 - [ ] One infeasible and one feasible location checked (`200`).
 - [ ] Ranked recommendations returned (`200`).
+- [ ] Placement confirmed (201) and occupancy checked.
+- [ ] Movement history contains the new record (200).
 - [ ] Optional classification run completed (`201`).
 
 ## Related documentation
