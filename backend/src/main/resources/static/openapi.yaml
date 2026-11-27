@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Intelligent Warehouse Slotting Optimization System API
   version: 0.1.0
-  description: Documented REST API for the current implementation. Recommendations support nearest_feasible and
+  description: Documented REST API for the current implementation. Recommendations support nearest_feasible, pick_frequency and
     weighted_score. ApiExceptionHandler maps business exceptions to HTTP 400, 404 or 409 with a JSON message. Framework
     errors may use the default Spring Boot body. Protected operations require a JWT Bearer token. Authorization
     uses the current active account and role in the database. Unspecified endpoints are denied. Use HTTPS outside
@@ -494,7 +494,7 @@ paths:
     get:
       tags:
       - Recommendations
-      summary: Rank feasible locations using nearest-feasible or weighted scoring
+      summary: Rank feasible locations using nearest-feasible, pick frequency or weighted scoring
       responses:
         '200':
           description: Ranked feasible locations for the selected strategy; weighted_score items include scoreBreakdown.
@@ -504,36 +504,33 @@ paths:
                 $ref: '#/components/schemas/RecommendationResponse'
               examples:
                 nearestFeasible:
-                  summary: Default distance-based ranking
+                  summary: Illustrative receiving-distance ranking
                   value:
-                    batchId: 5
+                    batchId: 13
                     strategy: nearest_feasible
-                    feasibleCount: 4
+                    feasibleCount: 9
                     recommendations:
                     - rank: 1
-                      locationId: 9
-                      locationCode: ST-09
-                      distanceMeters: 35
-                      explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
+                      locationId: 2
+                      locationCode: ST-02
+                      distanceMeters: 12
+                      explanation: Passes hard constraints; nearest feasible location by distance from receiving (m)
                       scoreBreakdown: null
-                    - rank: 2
-                      locationId: 10
-                      locationCode: ST-10
-                      distanceMeters: 40
-                      explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
+                      locationVersion: 0
+                pickFrequency:
+                  summary: Illustrative ABC-based target-tier ranking
+                  value:
+                    batchId: 13
+                    strategy: pick_frequency
+                    feasibleCount: 9
+                    recommendations:
+                    - rank: 1
+                      locationId: 5
+                      locationCode: ST-05
+                      distanceMeters: 17
+                      explanation: Passes hard constraints; pick frequency baseline; ABC class B; target tier MIDDLE; location tier MIDDLE; target zone match; ranked by distance to picking (m)
                       scoreBreakdown: null
-                    - rank: 3
-                      locationId: 11
-                      locationCode: ST-11
-                      distanceMeters: 45
-                      explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
-                      scoreBreakdown: null
-                    - rank: 4
-                      locationId: 12
-                      locationCode: ST-12
-                      distanceMeters: 55
-                      explanation: Passes hard constraints; nearest feasible location by distance to picking (m)
-                      scoreBreakdown: null
+                      locationVersion: 0
                 weightedScore:
                   summary: Illustrative weighted ranking (scores depend on current data and evaluation date)
                   value:
@@ -559,6 +556,7 @@ paths:
                         total: 0.75
                         classificationMissing: true
                         expiryUnknown: true
+                      locationVersion: 0
         '400':
           description: Invalid topN (outside 1–100), unknown strategy, or expired batch with weighted_score. The
             error body depends on Spring Boot configuration.
@@ -613,18 +611,24 @@ paths:
           type: string
           enum:
           - nearest_feasible
+          - pick_frequency
           - weighted_score
           default: nearest_feasible
         example: weighted_score
-      description: 'Evaluates hard constraints before ranking locations. The default strategy nearest_feasible orders
-        feasible locations by distance to the product outbound flow (PICKING or SHIPPING). The weighted_score strategy
-        uses distance (35%), ABC/XYZ classification (25%), expiry accessibility (25%), and volume fit (15%). For
-        weighted_score, scoreBreakdown explains the normalized components and weighted contributions. If no locations
-        are feasible, returns 200 with an empty recommendations list. feasibleCount counts hard-constraint-feasible
-        locations; weighted_score may omit locations with missing scoring inputs.
+      description: >-
+        Evaluates hard constraints before ranking locations. The default nearest_feasible strategy ranks feasible
+        locations by distance from receiving, then location ID. The pick_frequency strategy prioritizes storage
+        zones according to the latest product ABC classification: A targets FAST, B targets MIDDLE, and C targets
+        REMAINING. Access tiers and destination distances depend on the product outbound flow (PICKING or SHIPPING).
+        Target-tier locations are ranked first, followed by other feasible locations; within each group, ranking
+        uses destination distance and then location ID. If ABC classification is missing, ranking uses destination
+        distance and location ID without a tier preference. The weighted_score strategy uses distance (35%), ABC/XYZ
+        classification (25%), expiry accessibility (25%), and volume fit (15%). For weighted_score, scoreBreakdown
+        explains normalized components and weighted contributions. If no locations are feasible, returns 200 with
+        an empty recommendations list. feasibleCount counts hard-constraint-feasible locations; weighted_score
+        may omit locations with missing scoring inputs.
 
-
-        Allowed roles: operator.'
+        Allowed roles: operator.
       operationId: getRecommendations
   /api/placements/confirm:
     post:
@@ -1021,10 +1025,11 @@ components:
           example: A-01-01
         distanceMeters:
           type: number
-          example: 8
+          description: Distance from receiving for nearest_feasible; distance to the outbound destination for pick_frequency and weighted_score.
+          example: 12
         explanation:
           type: string
-          example: Passes hard constraints; nearest feasible location by distance to picking (m)
+          example: Passes hard constraints; nearest feasible location by distance from receiving (m)
           description: Human-readable ranking explanation; varies by strategy.
         scoreBreakdown:
           $ref: '#/components/schemas/ScoreBreakdown'
@@ -1043,6 +1048,7 @@ components:
           type: string
           enum:
           - nearest_feasible
+          - pick_frequency
           - weighted_score
           example: weighted_score
         feasibleCount:
@@ -1079,7 +1085,7 @@ components:
     ScoreBreakdown:
       type: object
       description: Normalized score components (0–1), weighted contributions, total and missing-data flags. The
-        score is calculated for weighted_score only. Null for nearest_feasible.
+        score is calculated for weighted_score only. Null for nearest_feasible and pick_frequency.
       properties:
         distance:
           type: number

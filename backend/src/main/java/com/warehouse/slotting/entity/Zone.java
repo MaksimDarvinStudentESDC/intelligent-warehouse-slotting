@@ -1,6 +1,7 @@
 package com.warehouse.slotting.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.ColumnTransformer;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -23,19 +24,22 @@ public class Zone {
     private String name;
 
     @Convert(converter = ZoneTypeConverter.class)
-    @JdbcTypeCode(SqlTypes.OTHER)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @ColumnTransformer(write = "?::zone_type")
     @Column(name = "zone_type", nullable = false,
             columnDefinition = "zone_type")
     private ZoneType zoneType;
 
     @Convert(converter = AccessTierConverter.class)
-    @JdbcTypeCode(SqlTypes.OTHER)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @ColumnTransformer(write = "?::access_tier")
     @Column(name = "tier_to_picking",
             columnDefinition = "access_tier")
     private AccessTier tierToPicking;
 
     @Convert(converter = AccessTierConverter.class)
-    @JdbcTypeCode(SqlTypes.OTHER)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @ColumnTransformer(write = "?::access_tier")
     @Column(name = "tier_to_shipping",
             columnDefinition = "access_tier")
     private AccessTier tierToShipping;
