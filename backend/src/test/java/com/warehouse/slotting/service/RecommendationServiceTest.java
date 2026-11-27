@@ -43,6 +43,7 @@ class RecommendationServiceTest {
         Location l = mock(Location.class);
         lenient().when(l.getId()).thenReturn(id);
         lenient().when(l.getCode()).thenReturn("ST-" + id);
+        lenient().when(l.getDistanceToReceivingM()).thenReturn(BigDecimal.valueOf(distance));
         lenient().when(l.getDistanceToPickingM()).thenReturn(BigDecimal.valueOf(distance));
         lenient().when(l.getVolumeCapacityDm3()).thenReturn(BigDecimal.valueOf(freeVolume));
         lenient().when(l.getOccupiedVolumeDm3()).thenReturn(BigDecimal.ZERO);
@@ -54,7 +55,7 @@ class RecommendationServiceTest {
         when(warehouse.getId()).thenReturn(1L);
         Product product = mock(Product.class);
         when(product.getWarehouse()).thenReturn(warehouse);
-        when(product.getOutboundFlow()).thenReturn(OutboundFlow.PICKING);
+        lenient().when(product.getOutboundFlow()).thenReturn(OutboundFlow.PICKING);
         lenient().when(product.getId()).thenReturn(1L);
         Batch batch = mock(Batch.class);
         when(batch.getProduct()).thenReturn(product);

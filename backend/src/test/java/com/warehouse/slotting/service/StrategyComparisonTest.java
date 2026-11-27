@@ -44,6 +44,7 @@ class StrategyComparisonTest {
         Location l = mock(Location.class);
         lenient().when(l.getId()).thenReturn(id);
         lenient().when(l.getCode()).thenReturn(code);
+        lenient().when(l.getDistanceToReceivingM()).thenReturn(new BigDecimal(picking));
         lenient().when(l.getDistanceToPickingM()).thenReturn(new BigDecimal(picking));
         lenient().when(l.getDistanceToShippingM()).thenReturn(new BigDecimal(shipping));
         lenient().when(l.getVolumeCapacityDm3()).thenReturn(new BigDecimal(capacity));
@@ -100,12 +101,12 @@ class StrategyComparisonTest {
     }
 
     @Test
-    void bothStrategiesSwitchToShippingDistancesForShippingFlow() {
+    void onlyWeightedStrategySwitchesToShippingDistance() {
         when(product.getOutboundFlow()).thenReturn(OutboundFlow.SHIPPING);
         var a = location(1, "A", "5", "60", "20", "0");
         var b = location(2, "B", "60", "5", "20", "0");
         var candidates = List.of(a, b);
-        assertEquals(2L, nearest.rank(batch, candidates, 1).getFirst().locationId());
+        assertEquals(1L, nearest.rank(batch, candidates, 1).getFirst().locationId());
         assertEquals(2L, weighted.rank(batch, candidates, 1).getFirst().locationId());
         assertEquals(0, new BigDecimal("5").compareTo(
                 weighted.rank(batch, candidates, 1).getFirst().distanceMeters()));
